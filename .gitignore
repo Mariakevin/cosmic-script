@@ -1,0 +1,10 @@
+node_modules/
+dist/
+release/
+.env
+*.log
+.DS_Store
+Thumbs.db
+.playwright-mcp
+.opencode
+docs/plan
