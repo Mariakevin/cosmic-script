@@ -76,8 +76,8 @@ class TestLoadDocument:
         """Error path: unsupported extension raises ValueError."""
         path = str(FIXTURES / "sample.txt")
         # Point to a file with unsupported extension, must exist for FileNotFoundError not to trigger first
-        # We'll create a temp file with .docx
-        with tempfile.NamedTemporaryFile(suffix=".docx", mode="w", delete=False) as f:
+        # We'll create a temp file with .xyz (truly unsupported)
+        with tempfile.NamedTemporaryFile(suffix=".xyz", mode="w", delete=False) as f:
             f.write("test")
             tmp_path = f.name
         try:
@@ -88,13 +88,13 @@ class TestLoadDocument:
 
     def test_unsupported_extension_message(self):
         """Error path: unsupported extension message includes extension."""
-        with tempfile.NamedTemporaryFile(suffix=".docx", mode="w", delete=False) as f:
+        with tempfile.NamedTemporaryFile(suffix=".xyz", mode="w", delete=False) as f:
             f.write("test")
             tmp_path = f.name
         try:
             with pytest.raises(ValueError) as exc:
                 load_document(tmp_path)
-            assert ".docx" in str(exc.value)
+            assert ".xyz" in str(exc.value)
         finally:
             os.unlink(tmp_path)
 

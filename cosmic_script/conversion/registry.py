@@ -1,4 +1,11 @@
-"""Character state management for screenplay conversion."""
+"""Character state management for screenplay conversion.
+
+Uses multiple detection strategies:
+  1. Dialogue tag patterns (``"Hello," said Sarah``)
+  2. Capitalised name + action verb at line start (``Sarah walked``)
+  3. ALL-CAPS words (``SARAH`` in dialogue tags or emphasis)
+  4. spaCy NER (industrial-strength named entity recognition)
+"""
 
 import re
 from typing import Optional
@@ -186,10 +193,11 @@ class CharacterRegistry:
     def update_from_text(self, chapter_text: str, chapter_number: int) -> None:
         """Scan *chapter_text* for character names and update the registry.
 
-        Uses three strategies:
+        Uses four strategies:
           1. Dialogue tag patterns (``"Hello," said Sarah``, ``John replied, ...``)
           2. Capitalised name + action verb at line start (``Sarah walked ...``)
           3. ALL-CAPS words (``SARAH`` in dialogue tags or emphasis)
+          4. spaCy NER (industrial-strength named entity recognition)
 
         Skips common non-name words via ``_SKIP_WORDS`` and ``_NAME_SKIP_WORDS``.
 
@@ -224,6 +232,21 @@ class CharacterRegistry:
         for match in self._ALL_CAPS.finditer(chapter_text):
             word = match.group(1)
             self._add_name(word, seen_in_chapter, chapter_number)
+
+        # ── Strategy 4: spaCy NER (if available) ───────────────────────
+        try:
+            import spacy
+            nlp = spacy.load("en_core_web_sm")
+            doc = nlp(chapter_text[:100000])  # Limit to 100K chars for perf
+            for ent in doc.ents:
+                if ent.label_ == "PERSON":
+                    name = ent.text.strip()
+                    if len(name) >= 2 and name.upper() not in self._SKIP_WORDS:
+                        self._add_name(name, seen_in_chapter, chapter_number)
+        except ImportError:
+            pass  # spaCy not installed — skip NER strategy
+        except Exception:
+            pass  # Model not downloaded or other error — skip gracefully
 
     def to_prompt_context(self) -> str:
         """Format the registry for injection into the LLM system prompt.

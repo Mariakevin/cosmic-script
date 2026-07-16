@@ -7,6 +7,11 @@ from dataclasses import dataclass
 from typing import Optional
 
 import litellm
+from screenplay_tools.fountain.parser import Parser as FountainParser
+from screenplay_tools.fountain.parser import (
+    ElementType as StElementType,
+    SceneHeading as StSceneHeading,
+)
 
 from cosmic_script.conversion.cache import ConversionCache, _build_cache_key
 from cosmic_script.conversion.prompts import SYSTEM_PROMPT, build_user_prompt
@@ -61,21 +66,15 @@ def _retry_with_backoff(
 
 
 # ---------------------------------------------------------------------------
-# Fountain parser
+# Fountain parser (uses screenplay-tools for spec-compliant parsing)
 # ---------------------------------------------------------------------------
-
-# Regex to identify a scene heading line in Fountain format.
-_SCENE_HEADING_RE = re.compile(
-    r"^(INT\.|EXT\.|INT/EXT\.|I/E\.)\s",
-    re.IGNORECASE | re.MULTILINE,
-)
 
 
 def _parse_fountain(text: str) -> list[Scene]:
     """Split LLM Fountain output into individual :class:`Scene` objects.
 
-    Scenes are delimited by lines that match a valid scene heading
-    (``INT.``, ``EXT.``, ``INT/EXT.``, ``I/E.``).
+    Uses ``screenplay-tools`` for spec-compliant Fountain parsing, then
+    groups elements into scenes by scene-heading boundaries.
 
     Args:
         text: Raw Fountain-formatted text returned by the LLM.
@@ -83,26 +82,63 @@ def _parse_fountain(text: str) -> list[Scene]:
     Returns:
         A list of :class:`Scene` instances.
     """
-    matches = list(_SCENE_HEADING_RE.finditer(text))
-    if not matches:
+    try:
+        parser = FountainParser()
+        parser.add_text(text)
+        script = parser.script
+    except Exception:
         logger.warning(
-            "No scene headings found in LLM output — "
+            "screenplay-tools parser failed — "
             "treating entire output as single scene"
         )
         return [Scene(heading="FADE IN:", content=text.strip())]
 
+    if not script or not script.elements:
+        logger.warning(
+            "No elements parsed from LLM output — "
+            "treating entire output as single scene"
+        )
+        return [Scene(heading="FADE IN:", content=text.strip())]
+
+    # Group elements into scenes by scene-heading boundaries
     scenes: list[Scene] = []
-    for i, match in enumerate(matches):
-        start = match.start()
-        # The heading is the line containing the match.
-        heading_line = text[match.start(): text.index("\n", match.start())].strip()
-        # Content runs from the start of this heading (or after previous heading)
-        # to the start of the next heading.
-        if i + 1 < len(matches):
-            content = text[match.start(): matches[i + 1].start()].strip()
+    current_heading = "FADE IN:"
+    current_lines: list[str] = []
+
+    for element in script.elements:
+        if isinstance(element, StSceneHeading):
+            # Save previous scene (if it has content)
+            if current_lines:
+                scenes.append(Scene(
+                    heading=current_heading,
+                    content="\n".join(current_lines).strip(),
+                ))
+            current_heading = element._text
+            current_lines = [element._text]
         else:
-            content = text[match.start():].strip()
-        scenes.append(Scene(heading=heading_line, content=content))
+            # Extract text — Character uses .name, others use ._text
+            if hasattr(element, 'name') and not isinstance(element, StSceneHeading):
+                el_text = element.name
+                if hasattr(element, 'extension') and element.extension:
+                    el_text += f" ({element.extension})"
+            else:
+                el_text = getattr(element, "_text", "")
+            if el_text:
+                current_lines.append(el_text)
+
+    # Don't forget the last scene
+    if current_lines:
+        scenes.append(Scene(
+            heading=current_heading,
+            content="\n".join(current_lines).strip(),
+        ))
+
+    if not scenes:
+        logger.warning(
+            "No scene headings found in parsed output — "
+            "treating entire output as single scene"
+        )
+        return [Scene(heading="FADE IN:", content=text.strip())]
 
     return scenes
 

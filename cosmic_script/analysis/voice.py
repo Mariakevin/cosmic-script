@@ -6,7 +6,7 @@ Analyzes character dialogue patterns to produce per-character metrics:
   - Vocabulary richness (type-token ratio)
   - Most common words (excluding stop words)
   - Speaking style classification
-  - Emotional tone classification
+  - Emotional tone classification (lexicon + textblob sentiment)
 
 Pure text analysis — no LLM calls required.
 """
@@ -136,9 +136,12 @@ def _classify_speaking_style(avg_line_length: float) -> str:
 def _classify_emotional_tone(text: str) -> str:
     """Classify the dominant emotional tone of dialogue text.
 
-    Counts occurrences of words from each emotional lexicon. The category
-    with the highest count wins. Ties are broken by priority: angry > sad >
-    happy > anxious > neutral.
+    Uses two strategies:
+      1. Lexicon-based: Count occurrences of words from each emotional lexicon.
+      2. Textblob sentiment (if available): Polarity + subjectivity analysis.
+
+    The category with the highest count wins. Ties are broken by priority:
+    angry > sad > happy > anxious > neutral.
 
     Args:
         text: The full dialogue text for a character.
@@ -164,6 +167,25 @@ def _classify_emotional_tone(text: str) -> str:
             others = sum(v for k, v in scores.items() if k != tone)
             if count > others or count >= 3:
                 return tone
+
+    # ── Textblob sentiment (if available) ─────────────────────────────
+    try:
+        from textblob import TextBlob
+        blob = TextBlob(text)
+        polarity = blob.sentiment.polarity  # -1.0 to 1.0
+        subjectivity = blob.sentiment.subjectivity  # 0.0 to 1.0
+
+        if polarity < -0.3:
+            return "sad"
+        elif polarity > 0.3:
+            return "happy"
+        elif subjectivity > 0.6 and abs(polarity) > 0.1:
+            # High subjectivity with moderate polarity suggests emotional
+            return "anxious" if polarity < 0 else "happy"
+    except ImportError:
+        pass  # textblob not installed — skip sentiment strategy
+    except Exception:
+        pass  # Other errors — skip gracefully
 
     return "neutral"
 

@@ -1,4 +1,4 @@
-"""Unified document loader — reads .txt, .md, .pdf, .epub into plain text."""
+"""Unified document loader — reads .txt, .md, .pdf, .epub, .docx into plain text."""
 
 from __future__ import annotations
 
@@ -15,6 +15,7 @@ def load_document(filepath: str) -> str:
         - .md   — strip Markdown syntax
         - .pdf  — extract text via PyMuPDF (``fitz``)
         - .epub — extract text via ``ebooklib`` + ``BeautifulSoup``
+        - .docx — extract text via ``mammoth``
 
     Args:
         filepath: Path to the source document.
@@ -41,8 +42,10 @@ def load_document(filepath: str) -> str:
         return _load_pdf(path)
     elif ext == ".epub":
         return _load_epub(path)
+    elif ext == ".docx":
+        return _load_docx(path)
     else:
-        raise ValueError(f"Unsupported file extension: '{ext}' — expected .txt, .md, .pdf, or .epub")
+        raise ValueError(f"Unsupported file extension: '{ext}' — expected .txt, .md, .pdf, .epub, or .docx")
 
 
 # ── Internal loaders ────────────────────────────────────────
@@ -131,3 +134,35 @@ def _load_epub(path: Path) -> str:
                     text_parts.append(plain)
 
     return "\n\n".join(text_parts).strip()
+
+
+def _load_docx(path: Path) -> str:
+    """Extract text from a DOCX file using ``mammoth``.
+
+    Mammoth converts DOCX to clean HTML, then strips tags for plain text.
+    Preserves paragraph structure by converting ``<p>`` tags to newlines.
+    """
+    try:
+        import mammoth
+    except ImportError:
+        raise ImportError(
+            "mammoth is required to load DOCX files. "
+            "Install it with: pip install mammoth"
+        )
+
+    with open(path, "rb") as f:
+        result = mammoth.convert_to_markdown(f)
+
+    text = result.value
+    # Clean up markdown artifacts from mammoth conversion
+    # Remove bold/italic markers
+    text = re.sub(r"\*\*(.+?)\*\*", r"\1", text)
+    text = re.sub(r"\*(.+?)\*", r"\1", text)
+    # Remove heading markers
+    text = re.sub(r"^#{1,6}\s+", "", text, flags=re.MULTILINE)
+    # Remove image tags
+    text = re.sub(r"!\[([^\]]*)\]\([^)]+\)", r"\1", text)
+    # Remove links — keep text only
+    text = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", text)
+
+    return text.strip()

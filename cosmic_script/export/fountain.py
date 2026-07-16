@@ -6,14 +6,25 @@ following the Fountain 1.1 specification conventions.
 
 from __future__ import annotations
 
+from screenplay_tools.fountain.parser import Parser as FountainParser
+from screenplay_tools.fountain.parser import (
+    ElementType as StElementType,
+    SceneHeading as StSceneHeading,
+    Action as StAction,
+    Character as StCharacter,
+    Dialogue as StDialogue,
+    Transition as StTransition,
+    Parenthetical as StParenthetical,
+)
+
 from cosmic_script.models import Screenplay, Scene, ScreenplayElement
 
 
 def _scenes_to_elements(scenes: list[Scene]) -> list[ScreenplayElement]:
     """Convert a list of Scene objects to ScreenplayElement objects.
 
-    Each scene's content is treated as raw Fountain text. We parse it
-    to extract scene headings, action, character cues, dialogue, etc.
+    Uses ``screenplay-tools`` for spec-compliant Fountain parsing, then
+    maps the parsed elements to our internal ``ScreenplayElement`` model.
 
     Args:
         scenes: List of Scene objects from the conversion pipeline.
@@ -23,47 +34,84 @@ def _scenes_to_elements(scenes: list[Scene]) -> list[ScreenplayElement]:
     """
     elements: list[ScreenplayElement] = []
 
+    # Map screenplay-tools ElementType to our element_type strings
+    _TYPE_MAP = {
+        StElementType.HEADING: "scene_heading",
+        StElementType.ACTION: "action",
+        StElementType.CHARACTER: "character",
+        StElementType.DIALOGUE: "dialogue",
+        StElementType.PARENTHETICAL: "parenthetical",
+        StElementType.TRANSITION: "transition",
+        StElementType.LYRIC: "lyric",
+        StElementType.PAGEBREAK: "page_break",
+        StElementType.SECTION: "section",
+        StElementType.SYNOPSIS: "synopsis",
+    }
+
     for scene in scenes:
-        # Add the scene heading
+        try:
+            parser = FountainParser()
+            parser.add_text(scene.content)
+            script = parser.script
+
+            if script and script.elements:
+                for el in script.elements:
+                    et = _TYPE_MAP.get(el.type)
+                    if et is None:
+                        continue  # Skip TITLEENTRY, NOTE, BONEYARD
+
+                    # Extract text — Character uses .name, others use ._text
+                    if isinstance(el, StCharacter):
+                        text = el.name
+                        if el.extension:
+                            text += f" ({el.extension})"
+                    else:
+                        text = getattr(el, "_text", "")
+
+                    # Centered action
+                    if isinstance(el, StAction) and el.centered:
+                        et = "centered"
+
+                    if text:
+                        elements.append(ScreenplayElement(
+                            element_type=et,
+                            text=text.strip(),
+                        ))
+                continue  # Scene parsed successfully
+        except Exception:
+            pass  # Fall through to manual parsing
+
+        # Fallback: manual parsing for scenes that screenplay-tools can't handle
         elements.append(ScreenplayElement(
             element_type="scene_heading",
             text=scene.heading,
         ))
 
-        # Parse the scene content line by line
         lines = scene.content.split("\n")
         i = 0
         while i < len(lines):
             line = lines[i].strip()
-
-            # Skip empty lines
             if not line:
                 i += 1
                 continue
-
-            # Skip the heading line if it appears in content
             if line.startswith(("INT.", "EXT.", "INT/EXT.", "I/E.")):
                 i += 1
                 continue
-
-            # Check for character cue (UPPERCASE, typically 2-20 chars)
+            # Character cue
             if line.isupper() and len(line) <= 20 and not line.startswith("FADE"):
                 elements.append(ScreenplayElement(
                     element_type="character",
                     text=line,
                 ))
                 i += 1
-                # Next non-empty line(s) are dialogue
                 while i < len(lines):
                     dial_line = lines[i].strip()
                     if not dial_line:
                         i += 1
                         continue
-                    # If it looks like another character cue or heading, stop
                     if (dial_line.isupper() and len(dial_line) <= 20) or \
                        dial_line.startswith(("INT.", "EXT.", "INT/EXT.", "I/E.")):
                         break
-                    # Check for parenthetical
                     if dial_line.startswith("(") and dial_line.endswith(")"):
                         elements.append(ScreenplayElement(
                             element_type="parenthetical",
@@ -76,80 +124,7 @@ def _scenes_to_elements(scenes: list[Scene]) -> list[ScreenplayElement]:
                         ))
                     i += 1
                 continue
-
-            # Centered text
-            if line.startswith(">") and line.endswith("<") and len(line) > 2:
-                elements.append(ScreenplayElement(
-                    element_type="centered",
-                    text=line[1:-1].strip(),
-                ))
-                i += 1
-                continue
-
-            # Section (#)
-            if line.startswith("#") and len(line) > 1 and line[1:].startswith(" "):
-                elements.append(ScreenplayElement(
-                    element_type="section",
-                    text=line.lstrip("#").strip(),
-                ))
-                i += 1
-                continue
-
-            # Synopsis (=)
-            if line.startswith("=") and len(line) > 1 and line[1:].startswith(" "):
-                elements.append(ScreenplayElement(
-                    element_type="synopsis",
-                    text=line[1:].strip(),
-                ))
-                i += 1
-                continue
-
-            # Lyric (~)
-            if line.startswith("~") and len(line) > 1:
-                elements.append(ScreenplayElement(
-                    element_type="lyric",
-                    text=line[1:].strip(),
-                ))
-                i += 1
-                continue
-
-            # Page break (===)
-            if line.strip() == "===":
-                elements.append(ScreenplayElement(
-                    element_type="page_break",
-                    text="===",
-                ))
-                i += 1
-                continue
-
-            # Forced scene heading (.TEXT)
-            if line.startswith(".") and len(line) > 1 and line[1].isupper():
-                elements.append(ScreenplayElement(
-                    element_type="scene_heading",
-                    text=line[1:].strip(),
-                ))
-                i += 1
-                continue
-
-            # Forced action (!TEXT)
-            if line.startswith("!") and len(line) > 1 and line[1].isupper():
-                elements.append(ScreenplayElement(
-                    element_type="action",
-                    text=line[1:].strip(),
-                ))
-                i += 1
-                continue
-
-            # Forced character (@TEXT)
-            if line.startswith("@") and len(line) > 1 and line[1].isupper():
-                elements.append(ScreenplayElement(
-                    element_type="character",
-                    text=line[1:].strip(),
-                ))
-                i += 1
-                continue
-
-            # Check for transition
+            # Transition
             if line.upper().endswith("TO:") or line.upper() == "FADE IN:":
                 elements.append(ScreenplayElement(
                     element_type="transition",
@@ -157,8 +132,7 @@ def _scenes_to_elements(scenes: list[Scene]) -> list[ScreenplayElement]:
                 ))
                 i += 1
                 continue
-
-            # Default: action line
+            # Default: action
             elements.append(ScreenplayElement(
                 element_type="action",
                 text=line,

@@ -209,12 +209,13 @@ class TestParseFountain:
         assert scenes[0].content == ""
 
     def test_scene_heading_in_middle_of_text(self) -> None:
-        """Happy-path: heading after some text."""
+        """Heading after some text creates two scenes (prologue + scene)."""
         text = "Prologue text.\n\nINT. ROOM - DAY\n\nAction."
         scenes = _parse_fountain(text)
-        # Only the INT. heading counts; leading text is part of first scene
-        assert len(scenes) == 1
-        assert scenes[0].heading == "INT. ROOM - DAY"
+        # screenplay-tools parser creates separate scene for pre-heading text
+        assert len(scenes) == 2
+        assert scenes[0].heading == "FADE IN:"  # Prologue gets default heading
+        assert scenes[1].heading == "INT. ROOM - DAY"
 
     def test_preserves_content_within_scene(self) -> None:
         """Happy-path: scene content is not truncated."""
