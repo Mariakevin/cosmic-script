@@ -12,6 +12,32 @@ import litellm
 logger = logging.getLogger(__name__)
 
 
+# ---------------------------------------------------------------------------
+# Custom exceptions
+# ---------------------------------------------------------------------------
+
+
+class AllModelsFailedError(Exception):
+    """Raised when every model in the fallback chain fails.
+
+    Attributes:
+        last_error: The exception from the final model attempt.
+        attempts: Total number of model attempts made.
+    """
+
+    def __init__(self, last_error: Exception, attempts: int):
+        self.last_error = last_error
+        self.attempts = attempts
+        super().__init__(
+            f"All {attempts} models failed. Last error: {last_error}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Model configuration
+# ---------------------------------------------------------------------------
+
+
 @dataclass
 class ModelConfig:
     """Configuration for a single model."""
@@ -68,8 +94,13 @@ class ModelRouter:
         """Get API key for the model's provider."""
         return self._api_keys.get(model.provider) or self.api_key
 
-    def _is_fallback_needed(self, error: Exception) -> bool:
-        """Check if error should trigger fallback to next model."""
+    def _should_fallback_for_error(self, error: Exception) -> bool:
+        """Check if error should trigger fallback to next model.
+
+        Rate limits (429), service unavailability (503), server errors
+        (500/502/504), and quota exhaustion all trigger fallback.
+        Authentication or other client errors do NOT.
+        """
         error_str = str(error).lower()
 
         # Check for rate limit / service errors
@@ -172,7 +203,7 @@ class ModelRouter:
 
             except Exception as exc:
                 last_error = exc
-                if self._is_fallback_needed(exc):
+                if self._should_fallback_for_error(exc):
                     logger.warning("Model %s failed, trying next: %s", model.id, exc)
                     continue
                 else:
@@ -180,12 +211,18 @@ class ModelRouter:
                     raise
 
         # All models failed
-        raise Exception(
-            f"All models failed. Last error: {last_error}"
+        raise AllModelsFailedError(
+            last_error=last_error,  # type: ignore[arg-type]
+            attempts=len(models_to_try),
         )
 
 
-# Global router instance
+# ---------------------------------------------------------------------------
+# Global router singleton
+# ---------------------------------------------------------------------------
+# Thread note: ModelRouter is stateless per-call (no mutable state between
+# calls). The only shared state is _api_keys which is set once at __init__
+# and never modified afterward. Safe for concurrent read access.
 _router: Optional[ModelRouter] = None
 
 
