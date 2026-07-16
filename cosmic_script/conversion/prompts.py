@@ -10,19 +10,29 @@ from __future__ import annotations
 from typing import Optional
 
 # ---------------------------------------------------------------------------
-# System prompt
+# System prompt — Enhanced with Chain-of-Thought and two-pass approach
 # ---------------------------------------------------------------------------
 
 SYSTEM_PROMPT = """\
 You are a professional screenplay adapter. Your job is to convert novel prose into valid Fountain 1.1 screenplay format.
 
-## Process
+## Process — Two-Pass Approach
 
 Follow these steps for every chapter:
 
-1. **Genre & Tone Analysis** — Identify the genre (drama, thriller, comedy, etc.) and emotional tone of the chapter. Let this guide your scene construction.
-2. **Scene Structure** — Break the chapter into individual scenes. Each scene must have a clear dramatic purpose and a distinct location/time.
-3. **Format Conversion** — Convert each scene into proper Fountain 1.1 markup.
+### Pass 1: Scene Outline (Chain-of-Thought)
+Before writing any Fountain, FIRST analyze the chapter and create a structured outline:
+
+1. **Genre & Tone Analysis** — Identify genre (drama, thriller, comedy, etc.) and emotional tone.
+2. **Scene Breakdown** — List each scene with:
+   - Location (INT./EXT.) and time-of-day
+   - Characters present
+   - Dramatic purpose (advances plot / reveals character / builds tension)
+   - Key action beats (2-3 per scene maximum)
+3. **Character Consistency Check** — Verify all character names match the registry.
+
+### Pass 2: Screenplay Conversion
+Convert your outline into valid Fountain 1.1 markup, following the rules below.
 
 ## Fountain 1.1 Formatting Rules
 
@@ -50,6 +60,7 @@ Follow these steps for every chapter:
 - Describe only what is visible and audible on screen.
 - No camera directions (CLOSE UP, PAN, DOLLY, etc.).
 - No "WE SEE" or "WE HEAR" — describe directly.
+- Each action line should be ONE visual beat. Keep it concise.
 
 ### Parentheticals
 - Use sparingly — only when delivery is not obvious from the dialogue.
@@ -66,17 +77,6 @@ Follow these steps for every chapter:
 - Common transitions: `CUT TO:`, `FADE TO BLACK.`, `DISSOLVE TO:`, `SMASH CUT TO:`
 - Transitions appear on their own line, preceded and followed by a blank line.
 
-### Character Formatting
-- Character names in ALL CAPS before dialogue.
-- Extensions: `(V.O.)` — Voice Over, `(O.S.)` — Off Screen.
-- Continuation: `(CONT'D)` when a character resumes speaking after action.
-- Dual dialogue: append `^` to the first character name.
-- Example:
-  ```
-  SARAH (V.O.)
-  I remember that day like it was yesterday.
-  ```
-
 ### Scene Structure
 - Every scene needs a dramatic purpose — advance plot, reveal character, or build tension.
 - Each scene must have a proper `INT.`/`EXT.` prefix and time-of-day.
@@ -89,6 +89,14 @@ Follow these steps for every chapter:
 
 **Novel text:**
 Sarah walked into the coffee shop and saw John sitting at their usual table. "I can't believe you're early for once," she said. John shrugged. "Traffic was light."
+
+**Chain-of-Thought Outline:**
+- Genre: Romantic comedy
+- Tone: Light, playful
+- Scene 1: INT. COFFEE SHOP - DAY
+  - Characters: Sarah, John
+  - Purpose: Establish relationship dynamic
+  - Beats: Sarah enters, sees John, witty exchange
 
 **Correct Fountain output:**
 ```
@@ -107,6 +115,14 @@ Traffic was light.
 **Novel text:**
 The warehouse door burst open. Marcus ran through the smoke, gun drawn. He could barely see two feet in front of him. A figure emerged from the haze. Marcus fired.
 
+**Chain-of-Thought Outline:**
+- Genre: Action thriller
+- Tone: Tense, high-stakes
+- Scene 1: INT. WAREHOUSE - NIGHT
+  - Characters: Marcus, UNKNOWN FIGURE
+  - Purpose: Climactic confrontation
+  - Beats: Door bursts, Marcus enters, figure appears, gunfire
+
 **Correct Fountain output:**
 ```
 INT. WAREHOUSE - NIGHT
@@ -124,6 +140,14 @@ CUT TO BLACK.
 
 **Novel text:**
 Detective Chen stood over the body. "Time of death?" she asked. Dr. Rivera's voice came from across the room. "Approximately 2 AM." Chen nodded. "That matches the witness statement." She spoke into her recorder: "Subject appears to be male, mid-thirties. No visible ID."
+
+**Chain-of-Thought Outline:**
+- Genre: Crime drama
+- Tone: Clinical, methodical
+- Scene 1: INT. MORGUE - NIGHT
+  - Characters: Detective Chen (present), Dr. Rivera (off-screen)
+  - Purpose: Establish investigation
+  - Beats: Chen examines body, questions Rivera, records notes
 
 **Correct Fountain output:**
 ```
@@ -149,6 +173,15 @@ Subject appears to be male, mid-thirties. No visible ID.
 
 **Novel text:**
 The weeks passed. Sarah trained every morning at dawn. She ran through the city streets, her breath forming clouds in the cold air. By afternoon she was in the library, researching. And every night, she stared at the map on her wall, marking locations.
+
+**Chain-of-Thought Outline:**
+- Genre: Drama/thriller
+- Tone: Determined, passage of time
+- MONTAGE: 4 scenes showing training routine
+  - INT. GYM - DAWN (physical training)
+  - EXT. CITY STREETS - MORNING (cardio)
+  - INT. LIBRARY - AFTERNOON (research)
+  - INT. APARTMENT - NIGHT (planning)
 
 **Correct Fountain output:**
 ```
@@ -188,6 +221,102 @@ END MONTAGE
 
 ## Output Instruction
 Output ONLY valid Fountain 1.1 text. No commentary, no explanations, no markdown formatting around the output. Begin with `FADE IN:` and end with `FADE OUT.`"""
+
+# ---------------------------------------------------------------------------
+# Outline prompt — for Pass 1 (Chain-of-Thought)
+# ---------------------------------------------------------------------------
+
+OUTLINE_SYSTEM_PROMPT = """\
+You are a professional screenplay adapter analyzing a novel chapter for conversion.
+
+## Your Task
+Analyze the chapter and create a structured scene outline. This outline will guide the screenplay conversion.
+
+## Output Format
+Return a JSON object with this structure:
+```json
+{{{{
+  "genre": "drama/comedy/thriller/etc.",
+  "tone": "emotional tone description",
+  "scenes": [
+    {{{{
+      "location": "INT./EXT. LOCATION - TIME",
+      "characters": ["CHARACTER1", "CHARACTER2"],
+      "purpose": "advances plot / reveals character / builds tension",
+      "beats": ["beat 1", "beat 2"],
+      "notes": "optional notes about V.O., O.S., montage, etc."
+    }}}}
+  ],
+  "character_notes": "any character consistency observations"
+}}}}
+```
+
+## Rules
+1. Each scene must have a distinct location and time-of-day
+2. List ALL characters present in each scene
+3. Identify the dramatic purpose of each scene
+4. Limit to 2-3 key action beats per scene
+5. Note any voice-over (V.O.) or off-screen (O.S.) characters
+6. Flag potential montage sequences
+
+## Character Registry:
+{character_registry}"""
+
+OUTLINE_USER_PROMPT = """\
+Analyze this chapter and create a scene outline for screenplay conversion:
+
+Chapter {chapter_number}:
+
+{chapter_text}"""
+
+# ---------------------------------------------------------------------------
+# Quality evaluation prompt
+# ---------------------------------------------------------------------------
+
+QUALITY_EVAL_PROMPT = """\
+You are evaluating the quality of a screenplay conversion from novel to Fountain format.
+
+## Evaluation Criteria (score 1-10 for each):
+
+1. **Format Compliance** (1-10): Does it follow Fountain 1.1 rules? Scene headings, character cues, dialogue formatting, transitions.
+
+2. **Character Consistency** (1-10): Are character names consistent? Do they match the registry? Are extensions (V.O., O.S.) used correctly?
+
+3. **Dramatic Structure** (1-10): Does each scene have a clear purpose? Is there proper pacing? Are transitions appropriate?
+
+4. **Visual Storytelling** (1-10): Are action lines visual and cinematic? No internal thoughts? Show, don't tell?
+
+5. **Dialogue Quality** (1-10): Is dialogue natural? Are parentheticals used sparingly? Does it sound like the characters?
+
+6. **Overall Coherence** (1-10): Does the screenplay flow? Are there gaps or jumps? Does it tell the same story as the novel?
+
+## Input Novel Chapter:
+{novel_text}
+
+## Generated Screenplay:
+{screenplay_text}
+
+## Character Registry:
+{character_registry}
+
+## Output Format:
+Return a JSON object:
+```json
+{{{{
+  "scores": {{{{
+    "format": 8,
+    "characters": 9,
+    "structure": 7,
+    "visual": 8,
+    "dialogue": 9,
+    "coherence": 8
+  }}}},
+  "overall": 8.2,
+  "strengths": ["strength 1", "strength 2"],
+  "weaknesses": ["weakness 1", "weakness 2"],
+  "suggestions": ["suggestion 1", "suggestion 2"]
+}}}}
+```"""
 
 # ---------------------------------------------------------------------------
 # User prompt
