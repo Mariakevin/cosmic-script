@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 # Retry helper
 # ---------------------------------------------------------------------------
 
+
 def _retry_with_backoff(
     fn,
     max_retries: int = 3,
@@ -84,7 +85,10 @@ def _parse_fountain(text: str) -> list[Scene]:
     """
     matches = list(_SCENE_HEADING_RE.finditer(text))
     if not matches:
-        # No scene headings found - treat the entire output as a single scene.
+        logger.warning(
+            "No scene headings found in LLM output — "
+            "treating entire output as single scene"
+        )
         return [Scene(heading="FADE IN:", content=text.strip())]
 
     scenes: list[Scene] = []
@@ -171,18 +175,20 @@ class ScreenplayConverter:
         registry, calls the LLM (with retry), and parses the Fountain
         output into scenes.
 
-        After a successful conversion, the registry is updated with any
-        new character names found in the chapter text.
-
         Args:
             chapter: The chapter to convert.
-            registry: The current character registry (may be mutated).
+            registry: The current character registry.
 
         Returns:
             A list of parsed :class:`Scene` objects.
 
         Raises:
             RuntimeError: If the LLM call fails after all retries.
+
+        Side effects:
+            MUTATES ``registry`` — updates it with characters found in the
+            chapter text. This is intentional: the registry accumulates
+            characters across the entire novel.
         """
         registry_context = registry.to_prompt_context()
         system_msg = SYSTEM_PROMPT.format(character_registry=registry_context)
@@ -192,151 +198,22 @@ class ScreenplayConverter:
             genre=self.config.genre,
         )
 
-        # Demo mode: return mock output without LLM call
+        # Guard: demo mode returns mock output without LLM call
         if self.config.model == "demo":
             raw_output = self._demo_output(chapter)
         else:
-            # Build cache key and check cache
-            cache_key = _build_cache_key(
-                chapter_text=chapter.text,
-                model=self.config.model,
-                temperature=self.config.temperature,
-                system_prompt=system_msg,
+            raw_output = self._get_cached_or_llm_output(
+                chapter, system_msg, user_msg
             )
 
-            cached = self._cache.get(cache_key)
-            if cached is not None:
-                raw_output = cached
-                logger.info(
-                    "Chapter %d: cache hit, skipping LLM call",
-                    chapter.number,
-                )
-            else:
-                def _call() -> str:
-                    if self.config.model == "auto":
-                        from cosmic_script.conversion.model_router import get_router
-                        router = get_router()
-                        content, _model_used = router.call_with_fallback(
-                            messages=[
-                                {"role": "system", "content": system_msg},
-                                {"role": "user", "content": user_msg},
-                            ],
-                            temperature=self.config.temperature,
-                            max_tokens=self.config.max_tokens,
-                        )
-                        return content
-                    else:
-                        response = litellm.completion(
-                            model=self.config.model,
-                            api_key=self.config.api_key,
-                            messages=[
-                                {"role": "system", "content": system_msg},
-                                {"role": "user", "content": user_msg},
-                            ],
-                            temperature=self.config.temperature,
-                            max_tokens=self.config.max_tokens,
-                        )
-                        content: str = response.choices[0].message.content or ""
-                        return content
-
-                raw_output = _retry_with_backoff(
-                    _call,
-                    max_retries=self.config.max_retries,
-                )
-
-                # Cache the response
-                self._cache.set(cache_key, raw_output, self.config.model)
-
-        # Self-healing: validate and retry if errors found (skip in demo mode)
-        validator = FountainValidator()
-        validation = validator.validate(raw_output)
-        if not validation["valid"] and self.config.max_retries > 0 and self.config.model != "demo":
-            error_summary = "\n".join(
-                f"- {e['code']}: {e['message']}" for e in validation["errors"][:5]
-            )
-            logger.warning(
-                "Self-healing: %d errors found in chapter %d, retrying with error context",
-                len(validation["errors"]),
-                chapter.number,
-            )
-
-            # Build enhanced prompt with error context
-            heal_system_msg = system_msg + (
-                "\n\n## Previous Attempt Had Errors\n\n"
-                "The following errors were found in your previous Fountain output:\n"
-                f"{error_summary}\n\n"
-                "Fix these errors and output ONLY valid Fountain 1.1 text."
-            )
-
-            def _heal_call() -> str:
-                heal_messages = [
-                    {"role": "system", "content": heal_system_msg},
-                    {"role": "user", "content": user_msg},
-                    {"role": "assistant", "content": raw_output},
-                    {
-                        "role": "user",
-                        "content": (
-                            "Fix the following errors in your Fountain output:\n"
-                            f"{error_summary}\n\n"
-                            "Output ONLY valid Fountain 1.1 text."
-                        ),
-                    },
-                ]
-                if self.config.model == "auto":
-                    from cosmic_script.conversion.model_router import get_router
-                    router = get_router()
-                    content, _model_used = router.call_with_fallback(
-                        messages=heal_messages,
-                        temperature=self.config.temperature,
-                        max_tokens=self.config.max_tokens,
-                    )
-                    return content
-                else:
-                    response = litellm.completion(
-                        model=self.config.model,
-                        api_key=self.config.api_key,
-                        messages=heal_messages,
-                        temperature=self.config.temperature,
-                        max_tokens=self.config.max_tokens,
-                    )
-                    content: str = response.choices[0].message.content or ""
-                    return content
-
-            try:
-                healed_output = _retry_with_backoff(
-                    _heal_call,
-                    max_retries=self.config.max_retries,
-                )
-                # Validate the healed output
-                healed_validation = validator.validate(healed_output)
-                if healed_validation["valid"] or (
-                    len(healed_validation["errors"])
-                    < len(validation["errors"])
-                ):
-                    logger.info(
-                        "Self-heal succeeded for chapter %d: %d -> %d errors",
-                        chapter.number,
-                        len(validation["errors"]),
-                        len(healed_validation["errors"]),
-                    )
-                    raw_output = healed_output
-                else:
-                    logger.warning(
-                        "Self-heal did not improve output for chapter %d, "
-                        "keeping original (%d vs %d errors)",
-                        chapter.number,
-                        len(validation["errors"]),
-                        len(healed_validation["errors"]),
-                    )
-            except RuntimeError:
-                logger.warning(
-                    "Self-heal LLM call failed for chapter %d, keeping original output",
-                    chapter.number,
-                )
+        # Guard: self-healing retries with error context
+        raw_output = self._self_heal_if_needed(
+            chapter, raw_output, system_msg, user_msg
+        )
 
         scenes = _parse_fountain(raw_output)
 
-        # Update character registry from the original chapter text.
+        # MUTATES: registry is updated with characters found in this chapter
         registry.update_from_text(
             chapter_text=chapter.text,
             chapter_number=chapter.number,
@@ -350,6 +227,158 @@ class ScreenplayConverter:
         )
 
         return scenes
+
+    # ------------------------------------------------------------------
+    # LLM call helpers (extracted from convert_chapter for clarity)
+    # ------------------------------------------------------------------
+
+    def _get_cached_or_llm_output(
+        self,
+        chapter: Chapter,
+        system_msg: str,
+        user_msg: str,
+    ) -> str:
+        """Return cached LLM output or make a fresh LLM call.
+
+        Checks the content-hash cache first. On miss, calls the LLM
+        (via ModelRouter when model="auto", or directly otherwise),
+        then stores the result in cache.
+        """
+        cache_key = _build_cache_key(
+            chapter_text=chapter.text,
+            model=self.config.model,
+            temperature=self.config.temperature,
+            system_prompt=system_msg,
+        )
+
+        cached = self._cache.get(cache_key)
+        if cached is not None:
+            logger.info(
+                "Chapter %d: cache hit, skipping LLM call",
+                chapter.number,
+            )
+            return cached
+
+        messages = [
+            {"role": "system", "content": system_msg},
+            {"role": "user", "content": user_msg},
+        ]
+
+        raw_output = _retry_with_backoff(
+            lambda: self._llm_completion(messages),
+            max_retries=self.config.max_retries,
+        )
+
+        self._cache.set(cache_key, raw_output, self.config.model)
+        return raw_output
+
+    def _llm_completion(self, messages: list[dict]) -> str:
+        """Make a single LLM completion call.
+
+        Routes through ModelRouter when ``self.config.model == "auto"``,
+        otherwise calls litellm directly with the specified model.
+        """
+        if self.config.model == "auto":
+            from cosmic_script.conversion.model_router import get_router
+            router = get_router()
+            content, _model_used = router.call_with_fallback(
+                messages=messages,
+                temperature=self.config.temperature,
+                max_tokens=self.config.max_tokens,
+            )
+            return content
+
+        response = litellm.completion(
+            model=self.config.model,
+            api_key=self.config.api_key,
+            messages=messages,
+            temperature=self.config.temperature,
+            max_tokens=self.config.max_tokens,
+        )
+        return response.choices[0].message.content or ""
+
+    def _self_heal_if_needed(
+        self,
+        chapter: Chapter,
+        raw_output: str,
+        system_msg: str,
+        user_msg: str,
+    ) -> str:
+        """Validate output and retry with error context if errors found.
+
+        If the initial LLM output contains validation errors, appends
+        the error details to the system prompt and re-runs the LLM call.
+        Keeps whichever output (original or healed) has fewer errors.
+        Skipped in demo mode or when max_retries == 0.
+        """
+        if self.config.max_retries <= 0 or self.config.model == "demo":
+            return raw_output
+
+        validator = FountainValidator()
+        validation = validator.validate(raw_output)
+        if validation["valid"]:
+            return raw_output
+
+        error_summary = "\n".join(
+            f"- {e['code']}: {e['message']}" for e in validation["errors"][:5]
+        )
+        logger.warning(
+            "Self-healing: %d errors found in chapter %d, retrying with error context",
+            len(validation["errors"]),
+            chapter.number,
+        )
+
+        heal_system_msg = system_msg + (
+            "\n\n## Previous Attempt Had Errors\n\n"
+            "The following errors were found in your previous Fountain output:\n"
+            f"{error_summary}\n\n"
+            "Fix these errors and output ONLY valid Fountain 1.1 text."
+        )
+        heal_messages = [
+            {"role": "system", "content": heal_system_msg},
+            {"role": "user", "content": user_msg},
+            {"role": "assistant", "content": raw_output},
+            {
+                "role": "user",
+                "content": (
+                    "Fix the following errors in your Fountain output:\n"
+                    f"{error_summary}\n\n"
+                    "Output ONLY valid Fountain 1.1 text."
+                ),
+            },
+        ]
+
+        try:
+            healed_output = _retry_with_backoff(
+                lambda: self._llm_completion(heal_messages),
+                max_retries=self.config.max_retries,
+            )
+            healed_validation = validator.validate(healed_output)
+            if healed_validation["valid"] or (
+                len(healed_validation["errors"])
+                < len(validation["errors"])
+            ):
+                logger.info(
+                    "Self-heal succeeded for chapter %d: %d -> %d errors",
+                    chapter.number,
+                    len(validation["errors"]),
+                    len(healed_validation["errors"]),
+                )
+                return healed_output
+            logger.warning(
+                "Self-heal did not improve output for chapter %d, "
+                "keeping original (%d vs %d errors)",
+                chapter.number,
+                len(validation["errors"]),
+                len(healed_validation["errors"]),
+            )
+        except RuntimeError:
+            logger.warning(
+                "Self-heal LLM call failed for chapter %d, keeping original output",
+                chapter.number,
+            )
+
+        return raw_output
 
     # ------------------------------------------------------------------
     # Demo mode

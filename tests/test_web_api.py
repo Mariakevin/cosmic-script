@@ -275,7 +275,7 @@ class TestCoverage:
 
     def test_coverage_empty_text_returns_400(self) -> None:
         """Error-path: empty text returns 400."""
-        response = client.post("/api/coverage", params={"text": ""})
+        response = client.post("/api/coverage", json={"text": ""})
         assert response.status_code == 400
 
     def test_coverage_demo_fallback(self) -> None:
@@ -283,7 +283,8 @@ class TestCoverage:
         # Use an invalid model to force fallback
         response = client.post(
             "/api/coverage",
-            params={"text": "A story about a hero.", "model": "bogus-model-that-fails"},
+            json={"text": "A story about a hero."},
+            params={"model": "bogus-model-that-fails"},
         )
         # Should fall back to demo without crashing
         assert response.status_code == 200
@@ -298,7 +299,8 @@ class TestCoverage:
         """Invariant: coverage response has expected schema."""
         response = client.post(
             "/api/coverage",
-            params={"text": "Hero saves the day.", "model": "bogus"},
+            json={"text": "Hero saves the day."},
+            params={"model": "bogus"},
         )
         assert response.status_code == 200
         data = response.json()
@@ -315,14 +317,15 @@ class TestLogline:
 
     def test_logline_empty_text_returns_400(self) -> None:
         """Error-path: empty text returns 400."""
-        response = client.post("/api/logline", params={"text": ""})
+        response = client.post("/api/logline", json={"text": ""})
         assert response.status_code == 400
 
     def test_logline_demo_fallback(self) -> None:
         """Happy-path: logline falls back to demo on API error."""
         response = client.post(
             "/api/logline",
-            params={"text": "A detective solves a mystery.", "model": "bogus-model"},
+            json={"text": "A detective solves a mystery."},
+            params={"model": "bogus-model"},
         )
         assert response.status_code == 200
         data = response.json()
@@ -333,7 +336,8 @@ class TestLogline:
         """Invariant: logline response is a string under a 'logline' key."""
         response = client.post(
             "/api/logline",
-            params={"text": "Story text here.", "model": "bogus"},
+            json={"text": "Story text here."},
+            params={"model": "bogus"},
         )
         data = response.json()
         assert isinstance(data["logline"], str)

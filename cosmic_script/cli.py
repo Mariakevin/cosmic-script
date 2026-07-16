@@ -26,6 +26,7 @@ except ImportError:
     pass
 
 from cosmic_script import __version__
+from cosmic_script.models import Screenplay
 
 app = typer.Typer(
     name="cosmic-script",
@@ -59,14 +60,14 @@ def _run_conversion(
     title: str,
     author: str,
     genre: str | None = None,
-) -> object:
+) -> Screenplay:
     """Run LLM-based conversion via the conversion pipeline.
 
-    Returns a ``Screenplay``-like object (duck-typed).
+    Returns a ``Screenplay`` object.
     """
     from cosmic_script.conversion.pipeline import convert
 
-    return convert(
+    return convert(  # type: ignore[return-value]
         text=text,
         model=model,
         api_key=api_key,
@@ -76,7 +77,7 @@ def _run_conversion(
     )
 
 
-def _export_fountain(screenplay: object) -> str:
+def _export_fountain(screenplay: Screenplay) -> str:
     """Export a screenplay object to Fountain-formatted text."""
     from cosmic_script.export.fountain import generate_fountain
 
@@ -151,91 +152,30 @@ def _parse_fountain(text: str) -> object:
 
 
 def _validate_fountain(text: str) -> List[dict]:
-    """Run basic validation checks on Fountain text.
+    """Run validation checks on Fountain text using FountainValidator.
 
-    Returns a list of dicts with keys ``severity``, ``line``, ``message``.
+    Delegates to the canonical ``FountainValidator`` instead of
+    duplicating validation logic. Returns a list of dicts with keys
+    ``severity``, ``line``, ``message`` for CLI display.
     """
+    from cosmic_script.export.validator import FountainValidator
+
+    validator = FountainValidator()
+    result = validator.validate(text)
+
     issues: List[dict] = []
-    lines = text.split("\n")
-
-    # --- Check 1: file is not empty ---
-    stripped = text.strip()
-    if not stripped:
-        issues.append(
-            {
-                "severity": "warning",
-                "line": 0,
-                "message": "File is empty — no screenplay content.",
-            }
-        )
-        return issues
-
-    # --- Check 2: at least one scene heading present ---
-    import re
-
-    heading_pattern = re.compile(r"^(INT\.|EXT\.|INT/EXT\.|I/E\.)", re.IGNORECASE)
-    has_heading = any(heading_pattern.match(line.strip()) for line in lines)
-    if not has_heading:
-        issues.append(
-            {
-                "severity": "error",
-                "line": 0,
-                "message": "No scene headings found. "
-                "Expected lines starting with INT., EXT., INT/EXT., or I/E.",
-            }
-        )
-
-    # --- Check 3: character names are uppercase ---
-    for i, line in enumerate(lines, start=1):
-        stripped_line = line.strip()
-        if (
-            stripped_line
-            and stripped_line.isupper()
-            and len(stripped_line) > 2
-            and not stripped_line.startswith("INT.")
-            and not stripped_line.startswith("EXT.")
-            and not stripped_line.startswith("INT/EXT.")
-            and not stripped_line.startswith("I/E.")
-            and not heading_pattern.match(stripped_line)
-        ):
-            # Could be a character cue — verify it's followed by dialogue
-            if i < len(lines) and lines[i].strip():
-                issues.append(
-                    {
-                        "severity": "info",
-                        "line": i,
-                        "message": f"'{stripped_line}' looks like a character name "
-                        f"but is not followed by an empty line "
-                        f"(Fountain convention).",
-                    }
-                )
-
-    # --- Check 4: no extremely long lines ---
-    for i, line in enumerate(lines, start=1):
-        if len(line.rstrip("\n")) > 200:
-            issues.append(
-                {
-                    "severity": "warning",
-                    "line": i,
-                    "message": f"Line is {len(line)} characters long "
-                    f"(consider breaking it up).",
-                }
-            )
-
-    # --- Check 5: try parsing with screenplay_tools (optional) ---
-    try:
-        _parse_fountain(text)
-    except ImportError:
-        pass  # screenplay-tools not installed, skip this check
-    except Exception as exc:
-        issues.append(
-            {
-                "severity": "error",
-                "line": 0,
-                "message": f"Parse error: {exc}",
-            }
-        )
-
+    for error in result["errors"]:
+        issues.append({
+            "severity": "error",
+            "line": error.get("line", 0),
+            "message": f"{error['code']}: {error['message']}",
+        })
+    for warning in result.get("warnings", []):
+        issues.append({
+            "severity": "warning",
+            "line": warning.get("line", 0),
+            "message": warning.get("message", ""),
+        })
     return issues
 
 

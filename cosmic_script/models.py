@@ -2,9 +2,31 @@
 
 from __future__ import annotations
 
+from enum import Enum
 from typing import Optional
 
 from pydantic import BaseModel, Field
+
+
+class ElementType(str, Enum):
+    """Types of screenplay elements in Fountain format.
+
+    Inherits from ``str`` so that ``ElementType.SCENE_HEADING == "scene_heading"``
+    evaluates to ``True`` — preserving backward compatibility with code that
+    compares against plain strings.
+    """
+
+    SCENE_HEADING = "scene_heading"
+    ACTION = "action"
+    CHARACTER = "character"
+    DIALOGUE = "dialogue"
+    PARENTHETICAL = "parenthetical"
+    TRANSITION = "transition"
+    CENTERED = "centered"
+    SECTION = "section"
+    SYNOPSIS = "synopsis"
+    LYRIC = "lyric"
+    PAGE_BREAK = "page_break"
 
 
 class Chapter(BaseModel):
@@ -43,7 +65,7 @@ class ScreenplayElement(BaseModel):
         text: The text content of the element.
     """
 
-    element_type: str
+    element_type: ElementType
     text: str
 
 

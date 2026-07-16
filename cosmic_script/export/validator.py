@@ -546,7 +546,10 @@ class FountainValidator:
     def _check_boneyards(
         self, text: str, errors: list[dict]
     ) -> None:
-        """Check for unclosed boneyards (E8)."""
+        """Check for unclosed boneyards (E8).
+
+        SIDE EFFECT: Appends error dicts to the ``errors`` list.
+        """
         opens = _BONEYARD_START_RE.findall(text)
         closes = _BONEYARD_END_RE.findall(text)
         if len(opens) > len(closes):
@@ -558,7 +561,10 @@ class FountainValidator:
             })
 
     def _check_notes(self, text: str, errors: list[dict]) -> None:
-        """Check for unclosed notes (E9)."""
+        """Check for unclosed notes (E9).
+
+        SIDE EFFECT: Appends error dicts to the ``errors`` list.
+        """
         opens = _NOTE_START_RE.findall(text)
         closes = _NOTE_END_RE.findall(text)
         if len(opens) > len(closes):
@@ -572,7 +578,10 @@ class FountainValidator:
     def _check_scene_headings(
         self, elements: list[dict], errors: list[dict]
     ) -> None:
-        """Check scene heading format (E1, E2)."""
+        """Check scene heading format (E1, E2).
+
+        SIDE EFFECT: Appends error dicts to the ``errors`` list.
+        """
         for el in elements:
             if el["type"] != "scene_heading":
                 continue
@@ -600,7 +609,10 @@ class FountainValidator:
         errors: list[dict],
         characters: list[str],
     ) -> None:
-        """Check character formatting (E4)."""
+        """Check character formatting (E4).
+
+        SIDE EFFECT: Appends error dicts to the ``errors`` list.
+        """
         for el in elements:
             if el["type"] != "character":
                 continue
@@ -617,7 +629,10 @@ class FountainValidator:
     def _check_transitions(
         self, elements: list[dict], errors: list[dict]
     ) -> None:
-        """Check transition formatting (E5, E6)."""
+        """Check transition formatting (E5, E6).
+
+        SIDE EFFECT: Appends error dicts to the ``errors`` list.
+        """
         for el in elements:
             if el["type"] != "transition":
                 continue
@@ -645,7 +660,10 @@ class FountainValidator:
     def _check_dialogue_context(
         self, elements: list[dict], errors: list[dict]
     ) -> None:
-        """Check for orphaned dialogue without character (E3)."""
+        """Check for orphaned dialogue without character (E3).
+
+        SIDE EFFECT: Appends error dicts to the ``errors`` list.
+        """
         for i, el in enumerate(elements):
             if el["type"] != "dialogue":
                 continue
@@ -675,7 +693,10 @@ class FountainValidator:
     def _check_parentheticals(
         self, elements: list[dict], errors: list[dict]
     ) -> None:
-        """Check for parenthetical outside dialogue context (E7)."""
+        """Check for parenthetical outside dialogue context (E7).
+
+        SIDE EFFECT: Appends error dicts to the ``errors`` list.
+        """
         for i, el in enumerate(elements):
             if el["type"] != "parenthetical":
                 continue
@@ -709,6 +730,8 @@ class FountainValidator:
         Valid scene numbers match the pattern ``#[A-Za-z0-9]+#``.
         Any ``#`` in a scene heading that does not follow this pattern
         is flagged.
+
+        SIDE EFFECT: Appends error dicts to the ``errors`` list.
         """
         for el in elements:
             if el["type"] != "scene_heading":
@@ -736,6 +759,8 @@ class FountainValidator:
 
         Dual dialogue characters should come in pairs (two per dialogue
         exchange). An odd count means at least one character is unpaired.
+
+        SIDE EFFECT: Appends error dicts to the ``errors`` list.
         """
         dual_chars: list[dict] = [
             el for el in elements
@@ -762,6 +787,8 @@ class FountainValidator:
 
         Flags when the same base character name appears with different
         full-name variants (e.g. JOHN vs JOHN DOE).
+
+        SIDE EFFECT: Appends error dicts to the ``errors`` list.
         """
         char_map: dict[str, list[str]] = {}
         for el in elements:
@@ -804,6 +831,8 @@ class FountainValidator:
 
         Centered text must follow the ``>text<`` pattern with content
         between the angle brackets.
+
+        SIDE EFFECT: Appends error dicts to the ``errors`` list.
         """
         for i, line in enumerate(lines):
             stripped = line.strip()
@@ -833,6 +862,8 @@ class FountainValidator:
         """Check section heading formatting (E14).
 
         Sections start with ``#`` followed by a space and text.
+
+        SIDE EFFECT: Appends error dicts to the ``errors`` list.
         """
         for i, line in enumerate(lines):
             stripped = line.strip()
@@ -863,6 +894,8 @@ class FountainValidator:
         """Check synopsis formatting (E15).
 
         Synopses start with ``=`` followed by a space and text.
+
+        SIDE EFFECT: Appends error dicts to the ``errors`` list.
         """
         for i, line in enumerate(lines):
             stripped = line.strip()
@@ -891,6 +924,8 @@ class FountainValidator:
         """Check lyric line formatting (E16).
 
         Lyrics start with ``~`` followed immediately by text.
+
+        SIDE EFFECT: Appends error dicts to the ``errors`` list.
         """
         for i, line in enumerate(lines):
             stripped = line.strip()
@@ -911,6 +946,8 @@ class FountainValidator:
         """Check page break formatting (E17).
 
         Page breaks are denoted by a line containing ``===``.
+
+        SIDE EFFECT: Appends error dicts to the ``errors`` list.
         """
         for i, line in enumerate(lines):
             stripped = line.strip()
@@ -933,6 +970,8 @@ class FountainValidator:
         Forced action: ``!TEXT``
         Forced character: ``@TEXT``
         Forced transition: ``> TEXT``
+
+        SIDE EFFECT: Appends error dicts to the ``errors`` list.
         """
         for i, line in enumerate(lines):
             stripped = line.strip()
@@ -997,6 +1036,8 @@ class FountainValidator:
         Bold: ``**text**``
         Italic: ``*text*``
         Underline: ``_text_``
+
+        SIDE EFFECT: Appends error dicts to the ``errors`` list.
         """
         for i, line in enumerate(lines):
             stripped = line.strip()
@@ -1046,6 +1087,8 @@ class FountainValidator:
         A likely scene heading is a line that matches the pattern
         ``WORD - WORD`` or ``WORD WORD - WORD`` (location - time-of-day)
         but does not start with a known prefix.
+
+        SIDE EFFECT: Appends error dicts to the ``errors`` list.
         """
         for i, line in enumerate(lines):
             stripped = line.strip()
@@ -1080,6 +1123,8 @@ class FountainValidator:
         or all-lowercase (typo), preceded by a blank line (or scene heading
         / transition boundary), and followed by a line that looks like
         dialogue.
+
+        SIDE EFFECT: Appends error dicts to the ``errors`` list.
         """
         for i, line in enumerate(lines):
             stripped = line.strip()
@@ -1130,6 +1175,8 @@ class FountainValidator:
 
         Catches ALL CAPS lines that look like transitions but were not
         classified as such by the parser (e.g., non-standard transitions).
+
+        SIDE EFFECT: Appends error dicts to the ``errors`` list.
         """
         for i, line in enumerate(lines):
             stripped = line.strip()
@@ -1180,6 +1227,8 @@ class FountainValidator:
         Walks backwards past blank lines to check if a line follows a scene
         heading. Flags strong dialogue indicators (quotes, questions,
         exclamations) that appear without a preceding character name.
+
+        SIDE EFFECT: Appends error dicts to the ``errors`` list.
         """
         for i, line in enumerate(lines):
             stripped = line.strip()

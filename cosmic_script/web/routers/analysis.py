@@ -10,7 +10,7 @@ import asyncio
 import os
 from concurrent.futures import ThreadPoolExecutor
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Body, HTTPException, Query
 
 from cosmic_script.models import Screenplay, Scene, ScreenplayElement
 from cosmic_script.web.schemas import ErrorResponse
@@ -43,7 +43,7 @@ def _text_to_screenplay(text: str) -> Screenplay:
     responses={400: {"model": ErrorResponse}, 504: {"model": ErrorResponse}},
 )
 async def generate_coverage(
-    text: str,
+    text: str = Body(..., embed=True, description="Screenplay or story text"),
     model: str = Query("auto", description="LLM model (auto = automatic fallback)"),
 ):
     """Generate a professional script coverage report.
@@ -107,7 +107,7 @@ def _coverage_to_dict(coverage) -> dict:
     responses={400: {"model": ErrorResponse}, 504: {"model": ErrorResponse}},
 )
 async def generate_logline(
-    text: str,
+    text: str = Body(..., embed=True, description="Screenplay or story text"),
     model: str = Query("auto", description="LLM model (auto = automatic fallback)"),
 ):
     """Generate a one-sentence logline for the provided text.
@@ -195,3 +195,92 @@ async def list_genres():
     from cosmic_script.conversion.genres import list_genres as _list_genres
 
     return {"genres": _list_genres()}
+
+
+# ── Voice Analysis ───────────────────────────────────────────────────────────
+
+
+@router.post("/voice")
+async def analyze_voice(
+    text: str = Body(..., embed=True, description="Screenplay or story text"),
+):
+    """Analyze character voice patterns in a screenplay.
+
+    Pure text analysis (no LLM).  Returns per-character metrics: line count,
+    vocabulary richness, speaking style, and emotional tone.
+    """
+    if not text.strip():
+        raise HTTPException(status_code=400, detail="Text content is required")
+
+    from cosmic_script.analysis.voice import analyze_voices as _analyze
+
+    screenplay = _text_to_screenplay(text)
+
+    try:
+        voices = _analyze(screenplay)
+        return {
+            "characters": [
+                {
+                    "name": v.name,
+                    "total_lines": v.total_lines,
+                    "avg_line_length": round(v.avg_line_length, 1),
+                    "vocabulary_richness": round(v.vocabulary_richness, 3),
+                    "common_words": v.common_words,
+                    "speaking_style": v.speaking_style,
+                    "emotional_tone": v.emotional_tone,
+                }
+                for v in voices
+            ]
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Voice analysis failed: {e}",
+        )
+
+
+# ── Pacing Analysis ─────────────────────────────────────────────────────────
+
+
+@router.post("/pacing")
+async def analyze_pacing(
+    text: str = Body(..., embed=True, description="Screenplay or story text"),
+):
+    """Analyze scene pacing in a screenplay.
+
+    Pure text analysis (no LLM).  Returns per-scene dialogue ratio, pacing
+    classification, issues, and recommendations.
+    """
+    if not text.strip():
+        raise HTTPException(status_code=400, detail="Text content is required")
+
+    from cosmic_script.analysis.pacing import analyze_pacing as _analyze
+
+    screenplay = _text_to_screenplay(text)
+
+    try:
+        report = _analyze(screenplay)
+        return {
+            "scenes": [
+                {
+                    "scene_number": s.scene_number,
+                    "heading": s.heading,
+                    "line_count": s.line_count,
+                    "dialogue_lines": s.dialogue_lines,
+                    "action_lines": s.action_lines,
+                    "dialogue_ratio": round(s.dialogue_ratio, 3),
+                    "pacing": s.pacing,
+                    "issues": s.issues,
+                }
+                for s in report.scenes
+            ],
+            "overall_pacing": report.overall_pacing,
+            "avg_scene_length": round(report.avg_scene_length, 1),
+            "total_issues": report.total_issues,
+            "recommendations": report.recommendations,
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Pacing analysis failed: {e}",
+        )
