@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "dev:all": "concurrently \"cd /d .. && uvicorn cosmic_script.web.app:app --reload --port 8000\" \"vite\"",
+    "dev:all": "concurrently \"cd .. && python -m uvicorn cosmic_script.web.app:app --reload --port 8000\" \"vite\"",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview"
