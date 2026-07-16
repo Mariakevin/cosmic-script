@@ -1,6 +1,9 @@
-"""Screenplay export routes (Fountain, PDF, etc.)."""
+"""Screenplay export routes (Fountain, PDF, TXT)."""
 
 from __future__ import annotations
+
+import base64
+import io
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import PlainTextResponse
@@ -52,10 +55,28 @@ async def export_screenplay(request: ExportRequest):
         if "\n\n" in content:
             content = content.split("\n\n", 1)[-1]
         return ExportResponse(content=content, format="txt")
+    elif request.format == "pdf":
+        # PDF export - generate in memory, return as base64
+        try:
+            from cosmic_script.export.pdf_export import ScreenplayPDF
+
+            pdf = ScreenplayPDF()
+            pdf.render_screenplay(screenplay)
+
+            buf = io.BytesIO()
+            pdf.output(buf)
+            pdf_bytes = buf.getvalue()
+            pdf_b64 = base64.b64encode(pdf_bytes).decode("ascii")
+            return ExportResponse(content=pdf_b64, format="pdf")
+        except Exception as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"PDF export failed: {e}",
+            )
     else:
         raise HTTPException(
             status_code=422,
-            detail=f"Unsupported format: {request.format}. Use 'fountain' or 'txt'.",
+            detail=f"Unsupported format: {request.format}. Use 'fountain', 'txt', or 'pdf'.",
         )
 
 

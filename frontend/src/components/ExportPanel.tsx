@@ -58,6 +58,21 @@ function downloadBlob(content: string, filename: string, mime: string) {
   URL.revokeObjectURL(url);
 }
 
+function downloadBase64(b64: string, filename: string, mime: string) {
+  const binary = atob(b64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  const blob = new Blob([bytes], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 export function ExportPanel({ screenplay }: ExportPanelProps) {
   const [format, setFormat] = useState<ExportFormat>('fountain');
   const [exporting, setExporting] = useState(false);
@@ -77,7 +92,7 @@ export function ExportPanel({ screenplay }: ExportPanelProps) {
         // PDF requires backend — try backend first, fallback to fountain
         try {
           const result = await exportScreenplay({ screenplay, format: 'pdf' });
-          downloadBlob(result.content, `${filename}.pdf`, 'application/pdf');
+          downloadBase64(result.content, `${filename}.pdf`, 'application/pdf');
         } catch {
           downloadBlob(rawFountain, `${filename}.fountain`, 'text/plain;charset=utf-8');
         }
