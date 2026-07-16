@@ -90,6 +90,9 @@ async def convert_to_screenplay(request: ConvertRequest):
     # Auto: let the router pick the best available model
     effective_model = request.model or "auto"
 
+    # Determine effective mode (rules mode bypasses LLM entirely)
+    effective_mode = request.mode or "ai"
+
     try:
         # Run conversion in thread pool with timeout
         loop = asyncio.get_event_loop()
@@ -103,6 +106,7 @@ async def convert_to_screenplay(request: ConvertRequest):
                     title=request.title or "Untitled",
                     author=request.author or "Unknown",
                     genre=request.genre,
+                    mode=effective_mode,
                 ),
             ),
             timeout=LLM_TIMEOUT,

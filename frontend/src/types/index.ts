@@ -21,6 +21,7 @@ export interface ConvertRequest {
   title?: string;
   author?: string;
   genre?: string;
+  mode?: string;
 }
 
 export interface GenreInfo {

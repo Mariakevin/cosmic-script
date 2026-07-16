@@ -194,6 +194,9 @@ class ConversionConfig:
     prompt builder for genre-specific formatting guidance. ``None``
     defaults to the ``"classic"`` preset."""
 
+    mode: str = "ai"
+    """Conversion mode: 'ai' uses LLM, 'rules' uses deterministic algorithms."""
+
 
 class ScreenplayConverter:
     """Orchestrates the conversion of novel chapters into a screenplay.
@@ -242,6 +245,16 @@ class ScreenplayConverter:
             chapter text. This is intentional: the registry accumulates
             characters across the entire novel.
         """
+        # Guard: rules mode bypasses all LLM calls
+        if self.config.mode == "rules":
+            from cosmic_script.conversion.rules_engine import convert_chapter_with_rules
+            scenes = convert_chapter_with_rules(chapter, registry)
+            registry.update_from_text(
+                chapter_text=chapter.text,
+                chapter_number=chapter.number,
+            )
+            return scenes
+
         # ── Pass 1: Generate outline ──────────────────────────────────
         outline = None
         if self.config.model != "demo":
@@ -828,6 +841,16 @@ FADE OUT."""
         """
         if not chapters:
             return Screenplay(title=title, author=author)
+
+        # Guard: rules mode uses bulk conversion
+        if self.config.mode == "rules":
+            from cosmic_script.conversion.rules_engine import convert_with_rules
+            screenplay = convert_with_rules(
+                text="\n\n".join(ch.text for ch in chapters),
+                title=title,
+                author=author,
+            )
+            return screenplay
 
         registry = CharacterRegistry()
         all_scenes: list[Scene] = []

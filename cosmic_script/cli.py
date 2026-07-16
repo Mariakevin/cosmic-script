@@ -60,6 +60,7 @@ def _run_conversion(
     title: str,
     author: str,
     genre: str | None = None,
+    mode: str = "ai",
 ) -> Screenplay:
     """Run LLM-based conversion via the conversion pipeline.
 
@@ -74,6 +75,7 @@ def _run_conversion(
         title=title,
         author=author,
         genre=genre,
+        mode=mode,
     )
 
 
@@ -228,6 +230,12 @@ def convert(
         "-g",
         help="Genre preset (classic, modern, tarantino, noir, comedy, horror, action, drama)",
     ),
+    mode: str = typer.Option(
+        "ai",
+        "--mode",
+        "-m",
+        help="Conversion mode: 'ai' (LLM) or 'rules' (offline)",
+    ),
 ) -> None:
     """Convert a free-form story into Fountain screenplay format.
 
@@ -236,13 +244,19 @@ def convert(
     """
     # --- Resolve parameters ---
     resolved_title = title or _default_title(input_file)
-    resolved_api_key = _resolve_api_key(api_key)
 
     # Determine model: demo mode overrides, otherwise auto
-    demo_mode = os.environ.get("DEMO_MODE", "false").lower() == "true"
-    model = "demo" if demo_mode else "auto"
-    if demo_mode:
-        console.print("[dim]Demo mode enabled (DEMO_MODE=true)[/dim]")
+    # When mode=rules, skip model selection (no API needed)
+    if mode == "rules":
+        console.print("[dim]Rules mode: using deterministic conversion (no AI)[/dim]")
+        model = "auto"  # Not used in rules mode, but required by pipeline
+        resolved_api_key = ""  # Not needed for rules mode
+    else:
+        resolved_api_key = _resolve_api_key(api_key)
+        demo_mode = os.environ.get("DEMO_MODE", "false").lower() == "true"
+        model = "demo" if demo_mode else "auto"
+        if demo_mode:
+            console.print("[dim]Demo mode enabled (DEMO_MODE=true)[/dim]")
 
     output_suffix = ".fountain" if format == "fountain" else ".txt"
     resolved_output = output or input_file.with_suffix(output_suffix)
@@ -271,6 +285,7 @@ def convert(
                 title=resolved_title,
                 author=author,
                 genre=genre,
+                mode=mode,
             )
             progress.remove_task(task_convert)
 
