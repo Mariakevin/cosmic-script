@@ -269,27 +269,38 @@ class ScreenplayConverter:
             )
 
             def _heal_call() -> str:
-                response = litellm.completion(
-                    model=self.config.model,
-                    api_key=self.config.api_key,
-                    messages=[
-                        {"role": "system", "content": heal_system_msg},
-                        {"role": "user", "content": user_msg},
-                        {"role": "assistant", "content": raw_output},
-                        {
-                            "role": "user",
-                            "content": (
-                                "Fix the following errors in your Fountain output:\n"
-                                f"{error_summary}\n\n"
-                                "Output ONLY valid Fountain 1.1 text."
-                            ),
-                        },
-                    ],
-                    temperature=self.config.temperature,
-                    max_tokens=self.config.max_tokens,
-                )
-                content: str = response.choices[0].message.content or ""
-                return content
+                heal_messages = [
+                    {"role": "system", "content": heal_system_msg},
+                    {"role": "user", "content": user_msg},
+                    {"role": "assistant", "content": raw_output},
+                    {
+                        "role": "user",
+                        "content": (
+                            "Fix the following errors in your Fountain output:\n"
+                            f"{error_summary}\n\n"
+                            "Output ONLY valid Fountain 1.1 text."
+                        ),
+                    },
+                ]
+                if self.config.model == "auto":
+                    from cosmic_script.conversion.model_router import get_router
+                    router = get_router()
+                    content, _model_used = router.call_with_fallback(
+                        messages=heal_messages,
+                        temperature=self.config.temperature,
+                        max_tokens=self.config.max_tokens,
+                    )
+                    return content
+                else:
+                    response = litellm.completion(
+                        model=self.config.model,
+                        api_key=self.config.api_key,
+                        messages=heal_messages,
+                        temperature=self.config.temperature,
+                        max_tokens=self.config.max_tokens,
+                    )
+                    content: str = response.choices[0].message.content or ""
+                    return content
 
             try:
                 healed_output = _retry_with_backoff(

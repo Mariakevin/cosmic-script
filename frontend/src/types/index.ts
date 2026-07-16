@@ -110,3 +110,36 @@ export interface ErrorResponse {
   detail?: string;
   line?: number;
 }
+
+// ── Voice Analysis ──────────────────────────────────────────────────────
+
+export interface VoiceCharacter {
+  name: string;
+  line_count: number;
+  vocabulary_richness: number;
+  speaking_style: string;
+  emotional_tone: string;
+}
+
+export interface VoiceResponse {
+  characters: VoiceCharacter[];
+  overall_style: string;
+}
+
+// ── Pacing Analysis ─────────────────────────────────────────────────────
+
+export interface PacingScene {
+  heading: string;
+  dialogue_ratio: number;
+  pacing: 'fast' | 'medium' | 'slow';
+  word_count: number;
+  issues: string[];
+  recommendations: string[];
+}
+
+export interface PacingResponse {
+  scenes: PacingScene[];
+  average_dialogue_ratio: number;
+  overall_pacing: string;
+  recommendations: string[];
+}

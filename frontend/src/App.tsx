@@ -1,4 +1,4 @@
-import { Component, useState } from 'react';
+import { Component, useState, useEffect, useCallback } from 'react';
 import './App.css';
 import { FileUpload } from './components/FileUpload';
 import { StoryPreview } from './components/StoryPreview';
@@ -6,6 +6,9 @@ import { ChapterList } from './components/ChapterList';
 import { ConversionPanel } from './components/ConversionPanel';
 import { FountainPreview } from './components/FountainPreview';
 import { CharacterRegistry } from './components/CharacterRegistry';
+import { AnalysisPanel } from './components/AnalysisPanel';
+import { ScreenplayStats } from './components/ScreenplayStats';
+import { ExportPanel } from './components/ExportPanel';
 import type { UploadResponse, ScreenplayResponse } from './types';
 
 type AppStep = 'upload' | 'preview' | 'result';
@@ -94,6 +97,36 @@ function StepIndicator({ current }: { current: AppStep }) {
   );
 }
 
+// ── Theme Toggle ────────────────────────────────────────────────────────
+
+function ThemeToggle() {
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    const stored = localStorage.getItem('cosmic-theme');
+    if (stored === 'light' || stored === 'dark') return stored;
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  });
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('cosmic-theme', theme);
+  }, [theme]);
+
+  const toggle = useCallback(() => {
+    setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));
+  }, []);
+
+  return (
+    <button
+      className="theme-toggle"
+      onClick={toggle}
+      aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+      title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+    >
+      {theme === 'dark' ? '\u2600\uFE0F' : '\uD83C\uDF19'}
+    </button>
+  );
+}
+
 // ── Main App ─────────────────────────────────────────────────────────────
 
 function App() {
@@ -101,6 +134,14 @@ function App() {
   const [uploadData, setUploadData] = useState<UploadResponse | null>(null);
   const [screenplay, setScreenplay] = useState<ScreenplayResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Initialize theme from localStorage on mount
+  useEffect(() => {
+    const stored = localStorage.getItem('cosmic-theme');
+    if (stored) {
+      document.documentElement.setAttribute('data-theme', stored);
+    }
+  }, []);
 
   const handleUploadComplete = (data: UploadResponse) => {
     setUploadData(data);
@@ -126,16 +167,26 @@ function App() {
   return (
     <ErrorBoundary>
       <div className="app">
+        {/* Skip to content link */}
+        <a href="#main-content" className="skip-to-content">
+          Skip to main content
+        </a>
+
         <header className="app-header">
-          <h1>Cosmic Script</h1>
-          <p>Transform narratives into screenplays with AI</p>
+          <div className="app-header-content">
+            <div>
+              <h1>Cosmic Script</h1>
+              <p>Transform narratives into screenplays with AI</p>
+            </div>
+          </div>
+          <ThemeToggle />
         </header>
 
-        <main className="app-main">
+        <main className="app-main" id="main-content">
           <StepIndicator current={step} />
 
           {error && (
-            <div className="error-banner" role="alert">
+            <div className="error-banner" role="alert" aria-live="assertive">
               {error}
               <button onClick={() => setError(null)}>Dismiss</button>
             </div>
@@ -164,9 +215,12 @@ function App() {
           )}
 
           {step === 'result' && screenplay && (
-            <div className="result-step">
+            <div className="result-step" aria-live="polite">
+              <ScreenplayStats screenplay={screenplay} />
               <FountainPreview screenplay={screenplay} />
+              <ExportPanel screenplay={screenplay} />
               <CharacterRegistry screenplay={screenplay} />
+              <AnalysisPanel screenplay={screenplay} />
               <button className="btn btn-ghost" onClick={handleReset}>
                 Convert Another
               </button>

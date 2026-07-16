@@ -12,6 +12,8 @@ import type {
   CoverageResponse,
   LoglineResponse,
   PageEstimateResponse,
+  VoiceResponse,
+  PacingResponse,
 } from '../types';
 
 const api = axios.create({
@@ -77,5 +79,15 @@ export async function estimatePages(text: string): Promise<PageEstimateResponse>
   const { data } = await api.get<PageEstimateResponse>('/api/estimate', {
     params: { text },
   });
+  return data;
+}
+
+export async function analyzeVoice(text: string): Promise<VoiceResponse> {
+  const { data } = await api.post<VoiceResponse>('/api/voice', { text });
+  return data;
+}
+
+export async function analyzePacing(text: string): Promise<PacingResponse> {
+  const { data } = await api.post<PacingResponse>('/api/pacing', { text });
   return data;
 }
