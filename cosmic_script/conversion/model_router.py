@@ -23,22 +23,23 @@ class ModelConfig:
 
 
 # Default model chain - tried in priority order
-# Google AI Studio (direct) → OpenRouter (popular free models)
+# Verified working as of 2026-07-16
 DEFAULT_MODELS = [
-    # Google AI Studio (direct, free tier)
+    # Google AI Studio (direct, free tier) — Gemini 2.5 Flash is the workhorse
     ModelConfig(id="gemini/gemini-2.5-flash", name="Gemini 2.5 Flash", provider="google", priority=0),
-    ModelConfig(id="gemini/gemini-2.5-pro", name="Gemini 2.5 Pro", provider="google", priority=1),
-    ModelConfig(id="gemini/gemini-2.0-flash", name="Gemini 2.0 Flash", provider="google", priority=2),
 
-    # OpenRouter Popular Free Models (ranked by usage)
-    ModelConfig(id="openrouter/tencent/hy3:free", name="Tencent HY3 (Free)", provider="openrouter", priority=10),  # #1 most popular
-    ModelConfig(id="openrouter/nvidia/nemotron-3-ultra-550b-a55b:free", name="Nemotron 3 Ultra 550B (Free)", provider="openrouter", priority=11),  # #2
-    ModelConfig(id="openrouter/nvidia/nemotron-3-super-120b-a12b:free", name="Nemotron 3 Super 120B (Free)", provider="openrouter", priority=12),  # #3
-    ModelConfig(id="openrouter/google/gemma-4-31b-it:free", name="Gemma 4 31B (Free)", provider="openrouter", priority=13),  # #4
-    ModelConfig(id="openrouter/qwen/qwen3-coder:free", name="Qwen3 Coder (Free)", provider="openrouter", priority=14),  # #5
-    ModelConfig(id="openrouter/meta-llama/llama-3.3-70b-instruct:free", name="Llama 3.3 70B (Free)", provider="openrouter", priority=15),  # #6
-    ModelConfig(id="openrouter/openai/gpt-oss-120b:free", name="GPT-OSS 120B (Free)", provider="openrouter", priority=16),  # #7
-    ModelConfig(id="openrouter/poolside/laguna-m.1:free", name="Laguna M.1 Coding (Free)", provider="openrouter", priority=17),  # #8
+    # OpenRouter Free Models (verified working)
+    ModelConfig(id="openrouter/tencent/hy3:free", name="Tencent HY3 (Free)", provider="openrouter", priority=10),
+    ModelConfig(id="openrouter/nvidia/nemotron-3-ultra-550b-a55b:free", name="Nemotron 3 Ultra 550B (Free)", provider="openrouter", priority=11),
+    ModelConfig(id="openrouter/poolside/laguna-m.1:free", name="Laguna M.1 Coding (Free)", provider="openrouter", priority=12),
+    ModelConfig(id="openrouter/nvidia/nemotron-3-nano-30b-a3b:free", name="Nemotron 3 Nano 30B (Free)", provider="openrouter", priority=13),
+
+    # Fallbacks (may be rate-limited during peak hours)
+    ModelConfig(id="openrouter/google/gemma-4-31b-it:free", name="Gemma 4 31B (Free)", provider="openrouter", priority=20),
+    ModelConfig(id="openrouter/meta-llama/llama-3.3-70b-instruct:free", name="Llama 3.3 70B (Free)", provider="openrouter", priority=21),
+    ModelConfig(id="openrouter/qwen/qwen3-coder:free", name="Qwen3 Coder (Free)", provider="openrouter", priority=22),
+    ModelConfig(id="gemini/gemini-2.5-pro", name="Gemini 2.5 Pro", provider="google", priority=23),
+    ModelConfig(id="gemini/gemini-2.0-flash", name="Gemini 2.0 Flash", provider="google", priority=24),
 ]
 
 # Status codes that trigger fallback
