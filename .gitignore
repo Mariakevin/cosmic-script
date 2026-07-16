@@ -39,3 +39,8 @@ release/
 .playwright-mcp
 .opencode
 docs/plan
+screenplay.fountain
+demo_output.fountain
+demo_output.pdf
+dist/
+.cache/
