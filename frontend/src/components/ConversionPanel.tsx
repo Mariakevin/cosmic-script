@@ -1,6 +1,6 @@
 import { useCallback, useState, useEffect } from 'react';
-import { convertToScreenplay, getModels, getGenres } from '../api/client';
-import type { ScreenplayResponse, ModelInfo, GenreInfo } from '../types';
+import { convertToScreenplay, getGenres } from '../api/client';
+import type { ScreenplayResponse, GenreInfo } from '../types';
 
 interface ConversionPanelProps {
   text: string;
@@ -12,13 +12,10 @@ export function ConversionPanel({ text, onConvert, onError }: ConversionPanelPro
   const [converting, setConverting] = useState(false);
   const [title, setTitle] = useState('');
   const [author, setAuthor] = useState('');
-  const [model, setModel] = useState('gemini/gemini-2.5-flash');
   const [genre, setGenre] = useState('');
-  const [models, setModels] = useState<ModelInfo[]>([]);
   const [genres, setGenres] = useState<GenreInfo[]>([]);
 
   useEffect(() => {
-    getModels().then((data) => setModels(data.models)).catch(() => {});
     getGenres().then((data) => setGenres(data.genres)).catch(() => {});
   }, []);
 
@@ -29,7 +26,6 @@ export function ConversionPanel({ text, onConvert, onError }: ConversionPanelPro
         text,
         title: title || undefined,
         author: author || undefined,
-        model: model || undefined,
         genre: genre || undefined,
       });
       onConvert(data);
@@ -39,7 +35,7 @@ export function ConversionPanel({ text, onConvert, onError }: ConversionPanelPro
     } finally {
       setConverting(false);
     }
-  }, [text, title, author, model, genre, onConvert, onError]);
+  }, [text, title, author, genre, onConvert, onError]);
 
   return (
     <div className="card conversion-panel">
@@ -49,7 +45,7 @@ export function ConversionPanel({ text, onConvert, onError }: ConversionPanelPro
         </div>
         <div>
           <h2 className="card-title">Convert to Screenplay</h2>
-          <p className="card-subtitle">AI-powered conversion with automatic model fallback</p>
+          <p className="card-subtitle">AI-powered conversion with automatic model selection</p>
         </div>
       </div>
 
@@ -81,28 +77,16 @@ export function ConversionPanel({ text, onConvert, onError }: ConversionPanelPro
 
       <div className="form-section">
         <div className="form-section-title">Conversion Settings</div>
-        <div className="form-row">
-          <div className="form-group">
-            <label htmlFor="genre">Genre Style</label>
-            <select id="genre" value={genre} onChange={(e) => setGenre(e.target.value)}>
-              <option value="">Classic (default)</option>
-              {genres.map((g) => (
-                <option key={g.name} value={g.name}>
-                  {g.name.charAt(0).toUpperCase() + g.name.slice(1)} &mdash; {g.description}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="form-group">
-            <label htmlFor="model">Model</label>
-            <select id="model" value={model} onChange={(e) => setModel(e.target.value)}>
-              {models.map((m) => (
-                <option key={m.id} value={m.id} disabled={!m.available}>
-                  {m.name} {m.available ? '' : '(no API key)'}
-                </option>
-              ))}
-            </select>
-          </div>
+        <div className="form-group">
+          <label htmlFor="genre">Genre Style</label>
+          <select id="genre" value={genre} onChange={(e) => setGenre(e.target.value)}>
+            <option value="">Classic (default)</option>
+            {genres.map((g) => (
+              <option key={g.name} value={g.name}>
+                {g.name.charAt(0).toUpperCase() + g.name.slice(1)} &mdash; {g.description}
+              </option>
+            ))}
+          </select>
         </div>
       </div>
 

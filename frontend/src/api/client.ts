@@ -8,7 +8,6 @@ import type {
   ExportResponse,
   ValidationResponse,
   CharactersResponse,
-  ModelsResponse,
   GenresResponse,
   CoverageResponse,
   LoglineResponse,
@@ -54,11 +53,6 @@ export async function extractCharacters(text: string): Promise<CharactersRespons
   return data;
 }
 
-export async function getModels(): Promise<ModelsResponse> {
-  const { data } = await api.get<ModelsResponse>('/api/convert/models');
-  return data;
-}
-
 export async function getHealth(): Promise<{ status: string }> {
   const { data } = await api.get<{ status: string }>('/health');
   return data;
@@ -69,17 +63,13 @@ export async function getGenres(): Promise<GenresResponse> {
   return data;
 }
 
-export async function generateCoverage(text: string, model?: string): Promise<CoverageResponse> {
-  const { data } = await api.post<CoverageResponse>('/api/coverage', { text }, {
-    params: model ? { model } : undefined,
-  });
+export async function generateCoverage(text: string): Promise<CoverageResponse> {
+  const { data } = await api.post<CoverageResponse>('/api/coverage', { text });
   return data;
 }
 
-export async function generateLogline(text: string, model?: string): Promise<LoglineResponse> {
-  const { data } = await api.post<LoglineResponse>('/api/logline', { text }, {
-    params: model ? { model } : undefined,
-  });
+export async function generateLogline(text: string): Promise<LoglineResponse> {
+  const { data } = await api.post<LoglineResponse>('/api/logline', { text });
   return data;
 }
 

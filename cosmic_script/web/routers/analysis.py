@@ -44,7 +44,7 @@ def _text_to_screenplay(text: str) -> Screenplay:
 )
 async def generate_coverage(
     text: str,
-    model: str = Query("gemini/gemini-2.5-flash", description="LLM model to use"),
+    model: str = Query("auto", description="LLM model (auto = automatic fallback)"),
 ):
     """Generate a professional script coverage report.
 
@@ -108,7 +108,7 @@ def _coverage_to_dict(coverage) -> dict:
 )
 async def generate_logline(
     text: str,
-    model: str = Query("gemini/gemini-2.5-flash", description="LLM model to use"),
+    model: str = Query("auto", description="LLM model (auto = automatic fallback)"),
 ):
     """Generate a one-sentence logline for the provided text.
 

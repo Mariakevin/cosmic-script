@@ -75,21 +75,20 @@ def _mock_conversion(request: ConvertRequest) -> ScreenplayResponse:
 async def convert_to_screenplay(request: ConvertRequest):
     """Convert text to screenplay format using LLM with automatic model fallback.
 
-    Tries models in priority order: Gemini Flash -> Gemini Pro -> OpenAI -> Anthropic.
-    Falls back to next model on rate limit or service error.
+    Models are chosen automatically. The router tries Gemini Flash first,
+    then falls back through free OpenRouter models on rate limit or error.
     Set model="demo" for mock conversion without API.
     """
     if not request.text.strip():
         raise HTTPException(status_code=400, detail="Text content is required")
 
-    # Check for demo mode
-    if request.model == "demo":
+    # Determine effective model
+    demo_mode = os.environ.get("DEMO_MODE", "false").lower() == "true"
+    if request.model == "demo" or demo_mode:
         return _mock_conversion(request)
 
-    # Check for explicit demo mode env var
-    demo_mode = os.environ.get("DEMO_MODE", "false").lower() == "true"
-    if demo_mode:
-        return _mock_conversion(request)
+    # Auto: let the router pick the best available model
+    effective_model = request.model or "auto"
 
     try:
         # Run conversion in thread pool with timeout
@@ -99,7 +98,7 @@ async def convert_to_screenplay(request: ConvertRequest):
                 _executor,
                 lambda: convert(
                     text=request.text,
-                    model=request.model or "gemini/gemini-2.5-flash",
+                    model=effective_model,
                     api_key=os.environ.get("GEMINI_API_KEY"),
                     title=request.title or "Untitled",
                     author=request.author or "Unknown",
@@ -118,7 +117,7 @@ async def convert_to_screenplay(request: ConvertRequest):
     except Exception as e:
         # Auto-fallback to demo on API errors
         error_msg = str(e)
-        if any(code in error_msg for code in ["429", "503", "500", "UNAVAILABLE", "RESOURCE_EXHAUSTED", "quota"]):
+        if any(code in error_msg for code in ["429", "503", "500", "UNAVAILABLE", "RESOURCE_EXHAUSTED", "quota", "All models failed"]):
             return _mock_conversion(request)
         raise HTTPException(status_code=500, detail=f"Conversion failed: {error_msg}")
 

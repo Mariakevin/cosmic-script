@@ -39,7 +39,7 @@ Output ONLY the logline sentence. No labels, no quotes, no extra text."""
 
 def generate_logline(
     screenplay: Screenplay,
-    model: str = "gemini/gemini-2.5-flash",
+    model: str = "auto",
     api_key: Optional[str] = None,
 ) -> str:
     """Generate a one-sentence logline for the screenplay.

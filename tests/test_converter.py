@@ -77,7 +77,7 @@ class TestConversionConfig:
     def test_default_values(self) -> None:
         """Invariant: defaults are sensible."""
         cfg = ConversionConfig()
-        assert cfg.model == "gemini/gemini-2.5-flash"
+        assert cfg.model == "auto"
         assert cfg.api_key is None
         assert cfg.max_retries == 3
         assert cfg.temperature == 0.3

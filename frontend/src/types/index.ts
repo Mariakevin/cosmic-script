@@ -20,7 +20,6 @@ export interface ConvertRequest {
   text: string;
   title?: string;
   author?: string;
-  model?: string;
   genre?: string;
 }
 
@@ -110,15 +109,4 @@ export interface ErrorResponse {
   error: string;
   detail?: string;
   line?: number;
-}
-
-export interface ModelInfo {
-  id: string;
-  name: string;
-  available: boolean;
-  priority: number;
-}
-
-export interface ModelsResponse {
-  models: ModelInfo[];
 }

@@ -11,7 +11,7 @@ from cosmic_script.export.fountain import generate_fountain
 
 def convert(
     text: str,
-    model: str = "gemini/gemini-2.5-flash",
+    model: str = "auto",
     api_key: str | None = None,
     title: str = "Untitled",
     author: str = "Unknown",
@@ -23,7 +23,8 @@ def convert(
 
     Args:
         text: The raw text content to convert.
-        model: LLM model name (default: gemini-2.5-flash).
+        model: LLM model name (default: ``"auto"`` = automatic fallback).
+            Pass ``"demo"`` for mock output without API calls.
         api_key: API key for the LLM provider.
         title: Screenplay title.
         author: Screenplay author.
@@ -43,7 +44,7 @@ def convert(
 
 def convert_file(
     filepath: str,
-    model: str = "gemini/gemini-2.5-flash",
+    model: str = "auto",
     api_key: str | None = None,
     title: str | None = None,
     author: str = "Unknown",

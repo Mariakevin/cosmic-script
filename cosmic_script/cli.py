@@ -264,12 +264,6 @@ def convert(
         "-f",
         help="Output format (fountain, txt)",
     ),
-    model: str = typer.Option(
-        "gemini/gemini-2.5-flash",
-        "--model",
-        "-m",
-        help="LLM model name (e.g. gemini-2.5-flash, gemini-2.5-pro)",
-    ),
     api_key: Optional[str] = typer.Option(
         None,
         "--api-key",
@@ -304,10 +298,10 @@ def convert(
     resolved_title = title or _default_title(input_file)
     resolved_api_key = _resolve_api_key(api_key)
 
-    # Check for demo mode
+    # Determine model: demo mode overrides, otherwise auto
     demo_mode = os.environ.get("DEMO_MODE", "false").lower() == "true"
-    if demo_mode and model != "demo":
-        model = "demo"
+    model = "demo" if demo_mode else "auto"
+    if demo_mode:
         console.print("[dim]Demo mode enabled (DEMO_MODE=true)[/dim]")
 
     output_suffix = ".fountain" if format == "fountain" else ".txt"

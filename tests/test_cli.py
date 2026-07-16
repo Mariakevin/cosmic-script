@@ -152,8 +152,6 @@ class TestConvertCommand:
                         custom_output,
                         "--format",
                         "txt",
-                        "--model",
-                        "gemini/gemini-2.0-pro",
                         "--api-key",
                         "test-key-123",
                         "--title",
@@ -359,7 +357,7 @@ class TestConvertCommand:
                 expected.unlink()
 
     def test_convert_default_model(self, temp_txt_file):
-        """Invariant: default model is gemini/gemini-2.5-flash."""
+        """Invariant: default model is auto (automatic fallback)."""
         with patch.dict(os.environ, {"GEMINI_API_KEY": "test-key", "DEMO_MODE": "false"}):
             with patch(
                 "cosmic_script.cli._load_document",
@@ -370,10 +368,10 @@ class TestConvertCommand:
                 runner.invoke(app, ["convert", str(temp_txt_file)])
                 mock_conv.assert_called_once()
                 kwargs = mock_conv.call_args.kwargs
-                assert kwargs.get("model") == "gemini/gemini-2.5-flash"
+                assert kwargs.get("model") == "auto"
 
-    def test_convert_custom_model(self, temp_txt_file):
-        """Input variation: custom model passed to conversion."""
+    def test_convert_custom_model_removed(self, temp_txt_file):
+        """Model flag removed - always uses auto."""
         with patch.dict(os.environ, {"GEMINI_API_KEY": "test-key", "DEMO_MODE": "false"}):
             with patch(
                 "cosmic_script.cli._load_document",
@@ -386,13 +384,11 @@ class TestConvertCommand:
                     [
                         "convert",
                         str(temp_txt_file),
-                        "--model",
-                        "anthropic/claude-sonnet-4",
                     ],
                 )
                 mock_conv.assert_called_once()
                 kwargs = mock_conv.call_args.kwargs
-                assert kwargs.get("model") == "anthropic/claude-sonnet-4"
+                assert kwargs.get("model") == "auto"
 
     # ── Default title from filename ─────────────────────────
 

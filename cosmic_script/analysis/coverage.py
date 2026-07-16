@@ -159,7 +159,7 @@ def _normalize_recommendation(rec: str) -> str:
 
 def generate_coverage(
     screenplay: Screenplay,
-    model: str = "gemini/gemini-2.5-flash",
+    model: str = "auto",
     api_key: Optional[str] = None,
 ) -> ScriptCoverage:
     """Generate professional script coverage using an LLM.

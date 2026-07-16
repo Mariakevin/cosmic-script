@@ -111,8 +111,10 @@ def _parse_fountain(text: str) -> list[Scene]:
 class ConversionConfig:
     """Configuration for the LLM conversion process."""
 
-    model: str = "gemini/gemini-2.5-flash"
-    """LLM model identifier passed to litellm."""
+    model: str = "auto"
+    """LLM model identifier. ``"auto"`` uses ModelRouter's fallback chain.
+    ``"demo"`` returns mock output. Any other value is passed directly
+    to litellm."""
 
     api_key: Optional[str] = None
     """API key for the LLM provider.  Falls back to environment variable."""
@@ -211,18 +213,31 @@ class ScreenplayConverter:
                 )
             else:
                 def _call() -> str:
-                    response = litellm.completion(
-                        model=self.config.model,
-                        api_key=self.config.api_key,
-                        messages=[
-                            {"role": "system", "content": system_msg},
-                            {"role": "user", "content": user_msg},
-                        ],
-                        temperature=self.config.temperature,
-                        max_tokens=self.config.max_tokens,
-                    )
-                    content: str = response.choices[0].message.content or ""
-                    return content
+                    if self.config.model == "auto":
+                        from cosmic_script.conversion.model_router import get_router
+                        router = get_router()
+                        content, _model_used = router.call_with_fallback(
+                            messages=[
+                                {"role": "system", "content": system_msg},
+                                {"role": "user", "content": user_msg},
+                            ],
+                            temperature=self.config.temperature,
+                            max_tokens=self.config.max_tokens,
+                        )
+                        return content
+                    else:
+                        response = litellm.completion(
+                            model=self.config.model,
+                            api_key=self.config.api_key,
+                            messages=[
+                                {"role": "system", "content": system_msg},
+                                {"role": "user", "content": user_msg},
+                            ],
+                            temperature=self.config.temperature,
+                            max_tokens=self.config.max_tokens,
+                        )
+                        content: str = response.choices[0].message.content or ""
+                        return content
 
                 raw_output = _retry_with_backoff(
                     _call,
