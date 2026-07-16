@@ -1,0 +1,9 @@
+This is a plain text file.
+
+It has multiple paragraphs.
+
+Some of them are quite short.
+
+Others are a bit longer and contain more detail to make sure we capture everything properly when loading the file. This should work fine for testing purposes.
+
+The quick brown fox jumps over the lazy dog.

@@ -1,10 +1,41 @@
-node_modules/
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+*.egg
 dist/
-release/
+build/
+*.whl
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Environment
 .env
-*.log
+.env.local
+
+# OS
 .DS_Store
 Thumbs.db
+
+# Project specific
+node_modules/
+release/
+*.log
 .playwright-mcp
 .opencode
 docs/plan

@@ -1,0 +1,16 @@
+This is a story without any chapter headings.
+It flows continuously from beginning to end.
+There are no markers to split on.
+
+The narrative continues without interruption.
+Every paragraph blends into the next.
+This is deliberate for testing the fallback mechanism.
+
+We need enough content here to ensure that when
+the fallback to equal-size chunks kicks in, we
+get multiple meaningful chunks rather than a
+single monolithic block.
+
+So let me keep writing more sentences until
+there is sufficient text to split into at least
+three or four chunks of reasonably equal size.

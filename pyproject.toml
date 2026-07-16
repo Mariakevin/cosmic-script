@@ -1,0 +1,52 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "cosmic-script"
+version = "0.1.0"
+description = "Convert free-form text stories into proper screenplay format"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+authors = [
+    { name = "Cosmic Script Team" }
+]
+keywords = ["screenplay", "script", "fountain", "novel", "conversion"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Text Processing :: Markup",
+]
+
+dependencies = [
+    "typer>=0.9.0",
+    "litellm>=1.0.0",
+    "screenplay-tools>=0.0.9",
+    "rapidfuzz>=3.0.0",
+    "pymupdf>=1.24.0",
+    "ebooklib>=0.18",
+    "pydantic>=2.0.0",
+    "rich>=13.0.0",
+    "python-dotenv>=1.0.0",
+    "fastapi>=0.104.0",
+    "uvicorn[standard]>=0.24.0",
+    "python-multipart>=0.0.6",
+    "fpdf2>=2.7.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-asyncio>=0.21.0",
+]
+
+[project.scripts]
+cosmic-script = "cosmic_script.cli:app"
+
+[tool.hatch.build.targets.wheel]
+packages = ["cosmic_script"]
