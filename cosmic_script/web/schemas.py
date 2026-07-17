@@ -57,7 +57,6 @@ class ConvertRequest(BaseModel):
     author: str | None = None
     model: str | None = None
     genre: str | None = None
-    mode: str | None = Field(default="ai", description="Conversion mode: 'ai' or 'rules'")
 
 
 class SceneResponse(BaseModel):

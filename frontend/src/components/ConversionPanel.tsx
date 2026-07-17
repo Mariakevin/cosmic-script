@@ -14,7 +14,6 @@ export function ConversionPanel({ text, onConvert, onError }: ConversionPanelPro
   const [author, setAuthor] = useState('');
   const [genre, setGenre] = useState('');
   const [genres, setGenres] = useState<GenreInfo[]>([]);
-  const [mode, setMode] = useState<'ai' | 'rules'>('ai');
 
   useEffect(() => {
     getGenres().then((data) => setGenres(data.genres)).catch(() => {});
@@ -27,8 +26,7 @@ export function ConversionPanel({ text, onConvert, onError }: ConversionPanelPro
         text,
         title: title || undefined,
         author: author || undefined,
-        genre: mode === 'ai' ? (genre || undefined) : undefined,
-        mode,
+        genre: genre || undefined,
       });
       onConvert(data);
     } catch (err) {
@@ -37,7 +35,7 @@ export function ConversionPanel({ text, onConvert, onError }: ConversionPanelPro
     } finally {
       setConverting(false);
     }
-  }, [text, title, author, genre, mode, onConvert, onError]);
+  }, [text, title, author, genre, onConvert, onError]);
 
   return (
     <div className="card conversion-panel">
@@ -80,40 +78,16 @@ export function ConversionPanel({ text, onConvert, onError }: ConversionPanelPro
       <div className="form-section">
         <div className="form-section-title">Conversion Settings</div>
         <div className="form-group">
-          <label>Conversion Mode</label>
-          <div className="mode-toggle">
-            <button
-              type="button"
-              className={`mode-toggle-btn ${mode === 'ai' ? 'active' : ''}`}
-              onClick={() => setMode('ai')}
-            >
-              AI (Smart)
-            </button>
-            <button
-              type="button"
-              className={`mode-toggle-btn ${mode === 'rules' ? 'active' : ''}`}
-              onClick={() => setMode('rules')}
-            >
-              Rules (Fast, Free)
-            </button>
-          </div>
-          {mode === 'rules' && (
-            <p className="mode-hint">Deterministic conversion - no API key needed</p>
-          )}
+          <label htmlFor="genre">Genre Style</label>
+          <select id="genre" value={genre} onChange={(e) => setGenre(e.target.value)}>
+            <option value="">Classic (default)</option>
+            {genres.map((g) => (
+              <option key={g.name} value={g.name}>
+                {g.name.charAt(0).toUpperCase() + g.name.slice(1)} &mdash; {g.description}
+              </option>
+            ))}
+          </select>
         </div>
-        {mode === 'ai' && (
-          <div className="form-group">
-            <label htmlFor="genre">Genre Style</label>
-            <select id="genre" value={genre} onChange={(e) => setGenre(e.target.value)}>
-              <option value="">Classic (default)</option>
-              {genres.map((g) => (
-                <option key={g.name} value={g.name}>
-                  {g.name.charAt(0).toUpperCase() + g.name.slice(1)} &mdash; {g.description}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
       </div>
 
       <button

@@ -4,7 +4,6 @@ Tests invariants that must hold for ANY valid input across:
 - Fountain validator roundtrip
 - Auto-fix idempotency
 - Fountain generation
-- Rules engine conversion
 - Character name casing
 """
 
@@ -16,7 +15,6 @@ from hypothesis import strategies as st
 
 from cosmic_script.export.validator import FountainValidator
 from cosmic_script.export.fountain import generate_fountain
-from cosmic_script.conversion.rules_engine import convert_with_rules
 from cosmic_script.models import Screenplay, ScreenplayElement, Scene
 
 
@@ -86,37 +84,6 @@ def _fountain_text() -> st.SearchStrategy[str]:
         return f"{h}\n\n{a}\n\n{c}\n{d}\n\nFADE OUT."
 
     return st.tuples(heading, char_name, dialogue, action).map(lambda t: build_fountain(*t))
-
-
-def _novel_text() -> st.SearchStrategy[str]:
-    """Generate simple novel-style text suitable for rules engine."""
-    location_words = st.sampled_from(
-        [
-            "in the kitchen",
-            "at the park",
-            "in the office",
-            "at the beach",
-            "in the car",
-            "at the restaurant",
-        ]
-    )
-    action_words = st.sampled_from(
-        [
-            "She walked forward.",
-            "He sat down.",
-            "They looked at each other.",
-            "The sun was setting.",
-            "Rain fell from the sky.",
-            "The phone rang.",
-            "A door opened.",
-        ]
-    )
-    time_words = st.sampled_from(["morning", "night", "afternoon", "evening"])
-
-    def build_paragraph(loc, act, time):
-        return f"{loc.capitalize()}, {act} It was {time}."
-
-    return st.tuples(location_words, action_words, time_words).map(lambda t: build_paragraph(*t))
 
 
 # ---------------------------------------------------------------------------
@@ -223,65 +190,6 @@ class TestFountainGeneration:
         )
         text = generate_fountain(screenplay)
         assert title in text
-
-
-class TestRulesEngineConversion:
-    """convert_with_rules(text) produces valid Screenplay object."""
-
-    @given(text=_novel_text())
-    @settings(
-        max_examples=30,
-        suppress_health_check=[HealthCheck.too_slow],
-        deadline=None,
-    )
-    def test_returns_screenplay_object(self, text: str) -> None:
-        """Rules engine must return a Screenplay instance."""
-        result = convert_with_rules(text)
-        assert isinstance(result, Screenplay)
-
-    @given(text=_novel_text())
-    @settings(
-        max_examples=30,
-        suppress_health_check=[HealthCheck.too_slow],
-        deadline=None,
-    )
-    def test_has_at_least_one_scene(self, text: str) -> None:
-        """Conversion should produce at least one scene."""
-        result = convert_with_rules(text)
-        assert len(result.scenes) >= 1
-
-    @given(text=_novel_text())
-    @settings(
-        max_examples=30,
-        suppress_health_check=[HealthCheck.too_slow],
-        deadline=None,
-    )
-    def test_scene_headings_are_valid_format(self, text: str) -> None:
-        """Scene headings should start with INT. or EXT."""
-        result = convert_with_rules(text)
-        for scene in result.scenes:
-            assert scene.heading.startswith(("INT.", "EXT.")), f"Invalid heading: {scene.heading}"
-
-
-class TestCharacterNamesUppercase:
-    """All character names in output are uppercase."""
-
-    @given(text=_novel_text())
-    @settings(
-        max_examples=30,
-        suppress_health_check=[HealthCheck.too_slow],
-        deadline=None,
-    )
-    def test_character_elements_are_uppercase(self, text: str) -> None:
-        """All CHARACTER elements in the screenplay must be uppercase."""
-        result = convert_with_rules(text)
-        for el in result.elements:
-            if el.element_type.value == "character":
-                name = el.text.strip()
-                # Remove parenthetical extension before checking case
-                clean = re.sub(r"\s*\(.*?\)\s*$", "", name)
-                if clean:
-                    assert clean == clean.upper(), f"Character name not uppercase: {clean!r}"
 
 
 class TestInvariantFountainValidator:

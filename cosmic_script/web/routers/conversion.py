@@ -32,14 +32,8 @@ def _screenplay_to_response(screenplay: Screenplay) -> ScreenplayResponse:
     return ScreenplayResponse(
         title=screenplay.title,
         author=screenplay.author,
-        scenes=[
-            SceneResponse(heading=s.heading, content=s.content)
-            for s in screenplay.scenes
-        ],
-        elements=[
-            ElementResponse(type=e.element_type, text=e.text)
-            for e in screenplay.elements
-        ],
+        scenes=[SceneResponse(heading=s.heading, content=s.content) for s in screenplay.scenes],
+        elements=[ElementResponse(type=e.element_type, text=e.text) for e in screenplay.elements],
     )
 
 
@@ -61,8 +55,12 @@ def _mock_conversion(request: ConvertRequest) -> ScreenplayResponse:
             ElementResponse(type="scene_heading", text="INT. DEMO SCENE - DAY"),
             ElementResponse(type="action", text="This is a demo conversion."),
             ElementResponse(type="character", text="NARRATOR"),
-            ElementResponse(type="dialogue", text="The LLM API quota has been exceeded. Please try again later."),
-            ElementResponse(type="action", text=f"Original text had {len(request.text.split())} words."),
+            ElementResponse(
+                type="dialogue", text="The LLM API quota has been exceeded. Please try again later."
+            ),
+            ElementResponse(
+                type="action", text=f"Original text had {len(request.text.split())} words."
+            ),
         ],
     )
 
@@ -90,9 +88,6 @@ async def convert_to_screenplay(request: ConvertRequest):
     # Auto: let the router pick the best available model
     effective_model = request.model or "auto"
 
-    # Determine effective mode (rules mode bypasses LLM entirely)
-    effective_mode = request.mode or "ai"
-
     try:
         # Run conversion in thread pool with timeout
         loop = asyncio.get_event_loop()
@@ -106,7 +101,6 @@ async def convert_to_screenplay(request: ConvertRequest):
                     title=request.title or "Untitled",
                     author=request.author or "Unknown",
                     genre=request.genre,
-                    mode=effective_mode,
                 ),
             ),
             timeout=LLM_TIMEOUT,
@@ -121,7 +115,18 @@ async def convert_to_screenplay(request: ConvertRequest):
     except Exception as e:
         # Auto-fallback to demo on API errors
         error_msg = str(e)
-        if any(code in error_msg for code in ["429", "503", "500", "UNAVAILABLE", "RESOURCE_EXHAUSTED", "quota", "All models failed"]):
+        if any(
+            code in error_msg
+            for code in [
+                "429",
+                "503",
+                "500",
+                "UNAVAILABLE",
+                "RESOURCE_EXHAUSTED",
+                "quota",
+                "All models failed",
+            ]
+        ):
             return _mock_conversion(request)
         raise HTTPException(status_code=500, detail=f"Conversion failed: {error_msg}")
 
@@ -133,11 +138,13 @@ async def list_models():
     models = router.get_available_models()
 
     # Add demo mode
-    models.append({
-        "id": "demo",
-        "name": "Demo Mode (No API)",
-        "available": True,
-        "priority": 99,
-    })
+    models.append(
+        {
+            "id": "demo",
+            "name": "Demo Mode (No API)",
+            "available": True,
+            "priority": 99,
+        }
+    )
 
     return {"models": models}

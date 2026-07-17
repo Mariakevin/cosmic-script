@@ -66,18 +66,18 @@ def _retry_with_backoff(
     for attempt in range(1, max_retries + 1):
         try:
             return fn()
-        except (litellm.APIError, litellm.RateLimitError,
-                litellm.ServiceUnavailableError, litellm.Timeout) as exc:
+        except (
+            litellm.APIError,
+            litellm.RateLimitError,
+            litellm.ServiceUnavailableError,
+            litellm.Timeout,
+        ) as exc:
             last_exc = exc
-            logger.warning(
-                "LLM call failed (attempt %d/%d): %s", attempt, max_retries, exc
-            )
+            logger.warning("LLM call failed (attempt %d/%d): %s", attempt, max_retries, exc)
             if attempt < max_retries:
                 delay = base_delay * (backoff_factor ** (attempt - 1))
                 time.sleep(delay)
-    raise RuntimeError(
-        f"LLM call failed after {max_retries} retries"
-    ) from last_exc
+    raise RuntimeError(f"LLM call failed after {max_retries} retries") from last_exc
 
 
 # ---------------------------------------------------------------------------
@@ -102,16 +102,12 @@ def _parse_fountain(text: str) -> list[Scene]:
         parser.add_text(text)
         script = parser.script
     except Exception:
-        logger.warning(
-            "screenplay-tools parser failed — "
-            "treating entire output as single scene"
-        )
+        logger.warning("screenplay-tools parser failed — treating entire output as single scene")
         return [Scene(heading="FADE IN:", content=text.strip())]
 
     if not script or not script.elements:
         logger.warning(
-            "No elements parsed from LLM output — "
-            "treating entire output as single scene"
+            "No elements parsed from LLM output — treating entire output as single scene"
         )
         return [Scene(heading="FADE IN:", content=text.strip())]
 
@@ -124,17 +120,19 @@ def _parse_fountain(text: str) -> list[Scene]:
         if isinstance(element, StSceneHeading):
             # Save previous scene (if it has content)
             if current_lines:
-                scenes.append(Scene(
-                    heading=current_heading,
-                    content="\n".join(current_lines).strip(),
-                ))
+                scenes.append(
+                    Scene(
+                        heading=current_heading,
+                        content="\n".join(current_lines).strip(),
+                    )
+                )
             current_heading = element._text
             current_lines = [element._text]
         else:
             # Extract text — Character uses .name, others use ._text
-            if hasattr(element, 'name') and not isinstance(element, StSceneHeading):
+            if hasattr(element, "name") and not isinstance(element, StSceneHeading):
                 el_text = element.name
-                if hasattr(element, 'extension') and element.extension:
+                if hasattr(element, "extension") and element.extension:
                     el_text += f" ({element.extension})"
             else:
                 el_text = getattr(element, "_text", "")
@@ -143,15 +141,16 @@ def _parse_fountain(text: str) -> list[Scene]:
 
     # Don't forget the last scene
     if current_lines:
-        scenes.append(Scene(
-            heading=current_heading,
-            content="\n".join(current_lines).strip(),
-        ))
+        scenes.append(
+            Scene(
+                heading=current_heading,
+                content="\n".join(current_lines).strip(),
+            )
+        )
 
     if not scenes:
         logger.warning(
-            "No scene headings found in parsed output — "
-            "treating entire output as single scene"
+            "No scene headings found in parsed output — treating entire output as single scene"
         )
         return [Scene(heading="FADE IN:", content=text.strip())]
 
@@ -161,6 +160,7 @@ def _parse_fountain(text: str) -> list[Scene]:
 # ---------------------------------------------------------------------------
 # Converter
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class ConversionConfig:
@@ -193,9 +193,6 @@ class ConversionConfig:
     """Genre preset key (e.g. ``"action"``, ``"noir"``). Passed to the
     prompt builder for genre-specific formatting guidance. ``None``
     defaults to the ``"classic"`` preset."""
-
-    mode: str = "ai"
-    """Conversion mode: 'ai' uses LLM, 'rules' uses deterministic algorithms."""
 
 
 class ScreenplayConverter:
@@ -245,16 +242,6 @@ class ScreenplayConverter:
             chapter text. This is intentional: the registry accumulates
             characters across the entire novel.
         """
-        # Guard: rules mode bypasses all LLM calls
-        if self.config.mode == "rules":
-            from cosmic_script.conversion.rules_engine import convert_chapter_with_rules
-            scenes = convert_chapter_with_rules(chapter, registry)
-            registry.update_from_text(
-                chapter_text=chapter.text,
-                chapter_number=chapter.number,
-            )
-            return scenes
-
         # ── Pass 1: Generate outline ──────────────────────────────────
         outline = None
         if self.config.model != "demo":
@@ -280,22 +267,16 @@ class ScreenplayConverter:
         if self.config.model == "demo":
             raw_output = self._demo_output(chapter)
         else:
-            raw_output = self._get_cached_or_llm_output(
-                chapter, system_msg, user_msg
-            )
+            raw_output = self._get_cached_or_llm_output(chapter, system_msg, user_msg)
 
         # Guard: self-healing retries with error context
-        raw_output = self._self_heal_if_needed(
-            chapter, raw_output, system_msg, user_msg
-        )
+        raw_output = self._self_heal_if_needed(chapter, raw_output, system_msg, user_msg)
 
         # ── Post-processing (deterministic fixes) ──────────────────────
         raw_output = postprocess_fountain(raw_output)
 
         # ── Hallucination detection ───────────────────────────────────
-        hallucination_warnings = self._check_character_consistency(
-            raw_output, registry
-        )
+        hallucination_warnings = self._check_character_consistency(raw_output, registry)
         if hallucination_warnings:
             for warning in hallucination_warnings:
                 logger.warning("Chapter %d: %s", chapter.number, warning)
@@ -330,10 +311,7 @@ class ScreenplayConverter:
         # ── LLM quality evaluation (optional, skip if rate-limited) ───
         # Only run LLM evaluation if we have a working model and
         # the algorithmic score is borderline (6-8 range)
-        if (
-            self.config.model != "demo"
-            and 6.0 <= quality_report.overall_score <= 8.0
-        ):
+        if self.config.model != "demo" and 6.0 <= quality_report.overall_score <= 8.0:
             try:
                 evaluation = self._evaluate_quality(chapter, raw_output, registry)
                 if evaluation.get("overall", 0) < 6.0:
@@ -416,9 +394,7 @@ class ScreenplayConverter:
             A dictionary with genre, tone, scenes, and character_notes.
         """
         registry_context = registry.to_prompt_context()
-        system_msg = OUTLINE_SYSTEM_PROMPT.format(
-            character_registry=registry_context
-        )
+        system_msg = OUTLINE_SYSTEM_PROMPT.format(character_registry=registry_context)
         user_msg = build_user_prompt(
             chapter_number=chapter.number,
             chapter_text=chapter.text,
@@ -454,8 +430,7 @@ class ScreenplayConverter:
 
         except (json.JSONDecodeError, RuntimeError) as e:
             logger.warning(
-                "Outline generation failed for chapter %d: %s — "
-                "falling back to simple outline",
+                "Outline generation failed for chapter %d: %s — falling back to simple outline",
                 chapter.number,
                 e,
             )
@@ -474,12 +449,14 @@ class ScreenplayConverter:
         paragraphs = [p.strip() for p in chapter.text.split("\n\n") if p.strip()]
         scenes = []
         for i, para in enumerate(paragraphs[:5]):  # Max 5 scenes
-            scenes.append({
-                "location": f"INT. LOCATION - {'DAY' if i % 2 == 0 else 'NIGHT'}",
-                "characters": [],
-                "purpose": "advances plot",
-                "beats": [para[:100] + "..." if len(para) > 100 else para],
-            })
+            scenes.append(
+                {
+                    "location": f"INT. LOCATION - {'DAY' if i % 2 == 0 else 'NIGHT'}",
+                    "characters": [],
+                    "purpose": "advances plot",
+                    "beats": [para[:100] + "..." if len(para) > 100 else para],
+                }
+            )
 
         return {
             "genre": "drama",
@@ -686,6 +663,7 @@ class ScreenplayConverter:
         """
         if self.config.model == "auto":
             from cosmic_script.conversion.model_router import get_router
+
             router = get_router()
             content, _model_used = router.call_with_fallback(
                 messages=messages,
@@ -761,8 +739,7 @@ class ScreenplayConverter:
             )
             healed_validation = validator.validate(healed_output)
             if healed_validation["valid"] or (
-                len(healed_validation["errors"])
-                < len(validation["errors"])
+                len(healed_validation["errors"]) < len(validation["errors"])
             ):
                 logger.info(
                     "Self-heal succeeded for chapter %d: %d -> %d errors",
@@ -841,16 +818,6 @@ FADE OUT."""
         """
         if not chapters:
             return Screenplay(title=title, author=author)
-
-        # Guard: rules mode uses bulk conversion
-        if self.config.mode == "rules":
-            from cosmic_script.conversion.rules_engine import convert_with_rules
-            screenplay = convert_with_rules(
-                text="\n\n".join(ch.text for ch in chapters),
-                title=title,
-                author=author,
-            )
-            return screenplay
 
         registry = CharacterRegistry()
         all_scenes: list[Scene] = []

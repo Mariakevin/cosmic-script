@@ -21,6 +21,7 @@ from rich.table import Table
 # Load .env file if python-dotenv is installed
 try:
     from dotenv import load_dotenv
+
     load_dotenv()
 except ImportError:
     pass
@@ -60,7 +61,6 @@ def _run_conversion(
     title: str,
     author: str,
     genre: str | None = None,
-    mode: str = "ai",
 ) -> Screenplay:
     """Run LLM-based conversion via the conversion pipeline.
 
@@ -75,7 +75,6 @@ def _run_conversion(
         title=title,
         author=author,
         genre=genre,
-        mode=mode,
     )
 
 
@@ -167,17 +166,21 @@ def _validate_fountain(text: str) -> List[dict]:
 
     issues: List[dict] = []
     for error in result["errors"]:
-        issues.append({
-            "severity": "error",
-            "line": error.get("line", 0),
-            "message": f"{error['code']}: {error['message']}",
-        })
+        issues.append(
+            {
+                "severity": "error",
+                "line": error.get("line", 0),
+                "message": f"{error['code']}: {error['message']}",
+            }
+        )
     for warning in result.get("warnings", []):
-        issues.append({
-            "severity": "warning",
-            "line": warning.get("line", 0),
-            "message": warning.get("message", ""),
-        })
+        issues.append(
+            {
+                "severity": "warning",
+                "line": warning.get("line", 0),
+                "message": warning.get("message", ""),
+            }
+        )
     return issues
 
 
@@ -230,12 +233,6 @@ def convert(
         "-g",
         help="Genre preset (classic, modern, tarantino, noir, comedy, horror, action, drama)",
     ),
-    mode: str = typer.Option(
-        "ai",
-        "--mode",
-        "-m",
-        help="Conversion mode: 'ai' (LLM) or 'rules' (offline)",
-    ),
 ) -> None:
     """Convert a free-form story into Fountain screenplay format.
 
@@ -246,17 +243,11 @@ def convert(
     resolved_title = title or _default_title(input_file)
 
     # Determine model: demo mode overrides, otherwise auto
-    # When mode=rules, skip model selection (no API needed)
-    if mode == "rules":
-        console.print("[dim]Rules mode: using deterministic conversion (no AI)[/dim]")
-        model = "auto"  # Not used in rules mode, but required by pipeline
-        resolved_api_key = ""  # Not needed for rules mode
-    else:
-        resolved_api_key = _resolve_api_key(api_key)
-        demo_mode = os.environ.get("DEMO_MODE", "false").lower() == "true"
-        model = "demo" if demo_mode else "auto"
-        if demo_mode:
-            console.print("[dim]Demo mode enabled (DEMO_MODE=true)[/dim]")
+    resolved_api_key = _resolve_api_key(api_key)
+    demo_mode = os.environ.get("DEMO_MODE", "false").lower() == "true"
+    model = "demo" if demo_mode else "auto"
+    if demo_mode:
+        console.print("[dim]Demo mode enabled (DEMO_MODE=true)[/dim]")
 
     output_suffix = ".fountain" if format == "fountain" else ".txt"
     resolved_output = output or input_file.with_suffix(output_suffix)
@@ -268,16 +259,12 @@ def convert(
             console=console,
         ) as progress:
             # Step 1: Load
-            task_load = progress.add_task(
-                "[yellow]Loading file...", total=None
-            )
+            task_load = progress.add_task("[yellow]Loading file...", total=None)
             text = _load_document(str(input_file))
             progress.remove_task(task_load)
 
             # Step 2: Convert
-            task_convert = progress.add_task(
-                "[yellow]Converting with LLM...", total=None
-            )
+            task_convert = progress.add_task("[yellow]Converting with LLM...", total=None)
             screenplay = _run_conversion(
                 text=text,
                 model=model,
@@ -285,14 +272,11 @@ def convert(
                 title=resolved_title,
                 author=author,
                 genre=genre,
-                mode=mode,
             )
             progress.remove_task(task_convert)
 
             # Step 3: Export
-            task_export = progress.add_task(
-                "[yellow]Exporting to Fountain...", total=None
-            )
+            task_export = progress.add_task("[yellow]Exporting to Fountain...", total=None)
             result = _export_fountain(screenplay)
             progress.remove_task(task_export)
 
@@ -300,9 +284,7 @@ def convert(
         resolved_output.write_text(result, encoding="utf-8")
 
     except FileNotFoundError:
-        console.print(
-            f"[red]Error:[/] Input file not found: [bold]{input_file}[/]"
-        )
+        console.print(f"[red]Error:[/] Input file not found: [bold]{input_file}[/]")
         raise typer.Exit(code=1)
 
     except ImportError as exc:
@@ -322,8 +304,7 @@ def convert(
 
     else:
         console.print(
-            f"[green]Success:[/] Converted [bold]{input_file.name}[/] "
-            f"-> [bold]{resolved_output}[/]"
+            f"[green]Success:[/] Converted [bold]{input_file.name}[/] -> [bold]{resolved_output}[/]"
         )
 
 
@@ -356,9 +337,7 @@ def validate(
     infos = [i for i in issues if i.get("severity") == "info"]
 
     if not issues:
-        console.print(
-            f"[green]Valid![/] No issues found in [bold]{input_file.name}[/]"
-        )
+        console.print(f"[green]Valid![/] No issues found in [bold]{input_file.name}[/]")
         raise typer.Exit(code=0)
 
     # Display issues
@@ -433,28 +412,18 @@ def info(
             # Count scenes (scene headings)
             from screenplay_tools.screenplay import ElementType
 
-            scene_count = sum(
-                1 for e in script.elements if e.type == ElementType.HEADING
-            )
+            scene_count = sum(1 for e in script.elements if e.type == ElementType.HEADING)
 
             # Collect character names (from CHARACTER elements)
             characters = sorted(
-                set(
-                    e.name
-                    for e in script.elements
-                    if e.type == ElementType.CHARACTER
-                )
+                set(e.name for e in script.elements if e.type == ElementType.CHARACTER)
             )
 
             # Count dialogue blocks
-            dialogue_count = sum(
-                1 for e in script.elements if e.type == ElementType.DIALOGUE
-            )
+            dialogue_count = sum(1 for e in script.elements if e.type == ElementType.DIALOGUE)
 
             # Count action lines
-            action_count = sum(
-                1 for e in script.elements if e.type == ElementType.ACTION
-            )
+            action_count = sum(1 for e in script.elements if e.type == ElementType.ACTION)
 
             table.add_row("Scenes", str(scene_count))
             table.add_row("Dialogue blocks", str(dialogue_count))

@@ -16,7 +16,6 @@ def convert(
     title: str = "Untitled",
     author: str = "Unknown",
     genre: str | None = None,
-    mode: str = "ai",
 ) -> Screenplay:
     """Convert text content to a Screenplay object.
 
@@ -30,12 +29,11 @@ def convert(
         title: Screenplay title.
         author: Screenplay author.
         genre: Genre preset key (e.g. ``"action"``, ``"noir"``).
-        mode: Conversion mode: 'ai' (LLM) or 'rules' (offline).
 
     Returns:
         A Screenplay object with converted scenes.
     """
-    config = ConversionConfig(model=model, api_key=api_key, genre=genre, mode=mode)
+    config = ConversionConfig(model=model, api_key=api_key, genre=genre)
     converter = ScreenplayConverter(config)
 
     chapters = split_into_chapters(text)
@@ -51,7 +49,6 @@ def convert_file(
     title: str | None = None,
     author: str = "Unknown",
     genre: str | None = None,
-    mode: str = "ai",
 ) -> tuple[Screenplay, str]:
     """Load a file and convert it to a screenplay.
 
@@ -62,7 +59,6 @@ def convert_file(
         title: Screenplay title (derived from filename if None).
         author: Screenplay author.
         genre: Genre preset key (e.g. ``"action"``, ``"noir"``).
-        mode: Conversion mode: 'ai' (LLM) or 'rules' (offline).
 
     Returns:
         Tuple of (Screenplay, Fountain text).
@@ -75,7 +71,9 @@ def convert_file(
         path = Path(filepath)
         title = path.stem.replace("_", " ").replace("-", " ").strip().title()
 
-    screenplay = convert(text, model=model, api_key=api_key, title=title, author=author, genre=genre, mode=mode)
+    screenplay = convert(
+        text, model=model, api_key=api_key, title=title, author=author, genre=genre
+    )
     fountain_text = generate_fountain(screenplay)
 
     return screenplay, fountain_text
