@@ -39,12 +39,17 @@ dependencies = [
     "fpdf2>=2.7.0",
     "mammoth>=1.6.0",
     "textblob>=0.18.0",
+    "chardet>=5.0",
 ]
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=7.0.0",
-    "pytest-asyncio>=0.21.0",
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "ruff>=0.1.0",
+    "mypy>=1.0",
+    "pre-commit>=3.0",
+    "hypothesis>=6.0",
 ]
 nlp = [
     "spacy>=3.7.0",
@@ -55,3 +60,17 @@ cosmic-script = "cosmic_script.cli:app"
 
 [tool.hatch.build.targets.wheel]
 packages = ["cosmic_script"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "A", "SIM"]
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true
+warn_return_any = true
+warn_unused_configs = true

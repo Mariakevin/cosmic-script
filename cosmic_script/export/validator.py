@@ -15,9 +15,7 @@ from collections import Counter
 # ---------------------------------------------------------------------------
 
 # Scene heading prefixes per Fountain spec
-_SCENE_PREFIXES = (
-    r"INT\.\s?/EXT\.|INT\.|EXT\.|I/E|INT/EXT\.?|INT\./EXT\."
-)
+_SCENE_PREFIXES = r"INT\.\s?/EXT\.|INT\.|EXT\.|I/E|INT/EXT\.?|INT\./EXT\."
 
 _SCENE_PREFIX_RE = re.compile(
     rf"^\s*({_SCENE_PREFIXES})",
@@ -205,12 +203,14 @@ class FountainValidator:
         # Notes produce warnings
         for el in parsed_elements:
             if el["type"] == "note":
-                warnings.append({
-                    "code": "W1",
-                    "message": "Note found in Fountain text",
-                    "text": el["text"],
-                    "line": el.get("line", 0),
-                })
+                warnings.append(
+                    {
+                        "code": "W1",
+                        "message": "Note found in Fountain text",
+                        "text": el["text"],
+                        "line": el.get("line", 0),
+                    }
+                )
 
         return {
             "valid": len(errors) == 0,
@@ -227,6 +227,12 @@ class FountainValidator:
             - Close unclosed boneyards
             - Close unclosed notes
             - Fix transition TO: endings (minimal)
+            - Add missing INT./EXT. prefix
+            - Add missing time-of-day (DAY)
+            - Format unformatted transitions
+            - Insert blank line before character after action
+            - Collapse excessive blank lines
+            - Strip trailing whitespace
 
         Args:
             fountain_text: The Fountain text to fix.
@@ -243,14 +249,42 @@ class FountainValidator:
         for idx, line in enumerate(lines):
             stripped = line.strip()
 
+            # Rule 6: Strip trailing whitespace
+            line = line.rstrip()
+
+            # Rule 5: Collapse excessive blank lines (handled after loop)
+            # Rule 4: Insert blank line before character (needs lookahead, handled separately)
+
+            # Rule 3: Unformatted transitions
+            if stripped.lower() == "cut to:":
+                fixed_lines.append("CUT TO:")
+                continue
+
+            # Rule 2: Missing time-of-day in scene heading
+            if _SCENE_PREFIX_RE.match(stripped) and not _TIME_OF_DAY_RE.search(stripped):
+                # Add " - DAY" if no time-of-day
+                fixed_lines.append(stripped + " - DAY")
+                continue
+
+            # Rule 1: Missing scene heading prefix
+            # Heuristic: line matches pattern WORD - WORD with time-of-day
+            # and not already a scene heading
+            if (
+                not _SCENE_PREFIX_RE.match(stripped)
+                and re.match(r"^[A-Za-z][A-Za-z\s\.]+-\s*[A-Za-z]+", stripped)
+                and _TIME_OF_DAY_RE.search(stripped)
+            ):
+                fixed_lines.append("INT. " + stripped)
+                continue
+
             # Close unclosed boneyard on same line
             if "/*" in stripped and "*/" not in stripped:
-                fixed_lines.append(line.rstrip() + " */")
+                fixed_lines.append(line + " */")
                 continue
 
             # Close unclosed note on same line
             if "[[" in stripped and "]]" not in stripped:
-                fixed_lines.append(line.rstrip() + " ]]")
+                fixed_lines.append(line + " ]]")
                 continue
 
             # Check if this is a character line (uppercase or lowercase name)
@@ -268,7 +302,44 @@ class FountainValidator:
 
             fixed_lines.append(line)
 
-        return "\n".join(fixed_lines)
+        # Rule 4: Insert blank line before character after action
+        # This needs a second pass because we need to look at previous line
+        final_lines: list[str] = []
+        for i, line in enumerate(fixed_lines):
+            stripped = line.strip()
+            # Check if this line is a character (uppercase, not scene heading, etc.)
+            if (
+                i > 0
+                and stripped
+                and not _is_likely_scene_heading(stripped)
+                and not _is_likely_transition(stripped)
+                and _is_character_like(stripped)
+            ):
+                # Check previous line is non-blank and not a scene heading / transition
+                prev_stripped = fixed_lines[i - 1].strip()
+                if (
+                    prev_stripped
+                    and not _is_likely_scene_heading(prev_stripped)
+                    and not _is_likely_transition(prev_stripped)
+                ):
+                    # Insert blank line before character
+                    final_lines.append("")  # blank line
+            final_lines.append(line)
+
+        # Rule 5: Collapse 3+ blank lines to 2
+        collapsed_lines: list[str] = []
+        blank_count = 0
+        for line in final_lines:
+            if line.strip() == "":
+                blank_count += 1
+                if blank_count <= 2:
+                    collapsed_lines.append(line)
+                # else skip extra blank lines
+            else:
+                blank_count = 0
+                collapsed_lines.append(line)
+
+        return "\n".join(collapsed_lines)
 
     # ------------------------------------------------------------------
     # Internal: Fountain line parser
@@ -315,12 +386,14 @@ class FountainValidator:
                     if j < len(lines):
                         if j > i:
                             boneyard_text += "\n" + lines[j]
-                elements.append({
-                    "type": "boneyard",
-                    "text": boneyard_text,
-                    "line": line_no,
-                    "clean_name": "",
-                })
+                elements.append(
+                    {
+                        "type": "boneyard",
+                        "text": boneyard_text,
+                        "line": line_no,
+                        "clean_name": "",
+                    }
+                )
                 i = j + 1 if j < len(lines) else len(lines)
                 continue
 
@@ -333,67 +406,79 @@ class FountainValidator:
                     if j < len(lines):
                         if j > i:
                             note_text += "\n" + lines[j]
-                elements.append({
-                    "type": "note",
-                    "text": note_text,
-                    "line": line_no,
-                    "clean_name": "",
-                })
+                elements.append(
+                    {
+                        "type": "note",
+                        "text": note_text,
+                        "line": line_no,
+                        "clean_name": "",
+                    }
+                )
                 i = j + 1 if j < len(lines) else len(lines)
                 continue
 
             # Page break (===)
             if _PAGE_BREAK_RE.match(stripped):
-                elements.append({
-                    "type": "page_break",
-                    "text": stripped,
-                    "line": line_no,
-                    "clean_name": "",
-                })
+                elements.append(
+                    {
+                        "type": "page_break",
+                        "text": stripped,
+                        "line": line_no,
+                        "clean_name": "",
+                    }
+                )
                 i += 1
                 continue
 
             # Centered text (>text<)
             if stripped.startswith(">") and stripped.endswith("<") and len(stripped) > 2:
-                elements.append({
-                    "type": "centered",
-                    "text": stripped[1:-1].strip(),
-                    "line": line_no,
-                    "clean_name": "",
-                })
+                elements.append(
+                    {
+                        "type": "centered",
+                        "text": stripped[1:-1].strip(),
+                        "line": line_no,
+                        "clean_name": "",
+                    }
+                )
                 i += 1
                 continue
 
             # Section (##...)
             if _SECTION_RE.match(stripped):
-                elements.append({
-                    "type": "section",
-                    "text": stripped.lstrip("#").strip(),
-                    "line": line_no,
-                    "clean_name": "",
-                })
+                elements.append(
+                    {
+                        "type": "section",
+                        "text": stripped.lstrip("#").strip(),
+                        "line": line_no,
+                        "clean_name": "",
+                    }
+                )
                 i += 1
                 continue
 
             # Synopsis (= text)
             if _SYNOPSIS_RE.match(stripped):
-                elements.append({
-                    "type": "synopsis",
-                    "text": stripped[1:].strip(),
-                    "line": line_no,
-                    "clean_name": "",
-                })
+                elements.append(
+                    {
+                        "type": "synopsis",
+                        "text": stripped[1:].strip(),
+                        "line": line_no,
+                        "clean_name": "",
+                    }
+                )
                 i += 1
                 continue
 
             # Lyric (~text)
             if _LYRIC_RE.match(stripped):
-                elements.append({
-                    "type": "lyric",
-                    "text": stripped[1:].strip(),
-                    "line": line_no,
-                    "clean_name": "",
-                })
+                elements.append(
+                    {
+                        "type": "lyric",
+                        "text": stripped[1:].strip(),
+                        "line": line_no,
+                        "clean_name": "",
+                    }
+                )
                 i += 1
                 continue
 
@@ -401,12 +486,14 @@ class FountainValidator:
             if stripped.startswith(".") and len(stripped) > 1:
                 text_after = stripped[1:].strip()
                 if text_after:
-                    elements.append({
-                        "type": "scene_heading",
-                        "text": text_after,
-                        "line": line_no,
-                        "clean_name": "",
-                    })
+                    elements.append(
+                        {
+                            "type": "scene_heading",
+                            "text": text_after,
+                            "line": line_no,
+                            "clean_name": "",
+                        }
+                    )
                     i += 1
                     continue
 
@@ -414,12 +501,14 @@ class FountainValidator:
             if stripped.startswith("!") and len(stripped) > 1:
                 text_after = stripped[1:].strip()
                 if text_after:
-                    elements.append({
-                        "type": "action",
-                        "text": text_after,
-                        "line": line_no,
-                        "clean_name": "",
-                    })
+                    elements.append(
+                        {
+                            "type": "action",
+                            "text": text_after,
+                            "line": line_no,
+                            "clean_name": "",
+                        }
+                    )
                     i += 1
                     continue
 
@@ -427,47 +516,55 @@ class FountainValidator:
             if stripped.startswith("@") and len(stripped) > 1:
                 text_after = stripped[1:].strip()
                 if text_after:
-                    elements.append({
-                        "type": "character",
-                        "text": text_after,
-                        "line": line_no,
-                        "clean_name": _extract_clean_character(text_after),
-                    })
+                    elements.append(
+                        {
+                            "type": "character",
+                            "text": text_after,
+                            "line": line_no,
+                            "clean_name": _extract_clean_character(text_after),
+                        }
+                    )
                     last_char_line = line_no
                     i += 1
                     continue
 
             # Force transition (> prefix)
             if _FORCE_TRANSITION_RE.match(stripped):
-                elements.append({
-                    "type": "transition",
-                    "text": stripped.lstrip(">").strip(),
-                    "line": line_no,
-                    "clean_name": "",
-                })
+                elements.append(
+                    {
+                        "type": "transition",
+                        "text": stripped.lstrip(">").strip(),
+                        "line": line_no,
+                        "clean_name": "",
+                    }
+                )
                 i += 1
                 continue
 
             # Scene heading detection
             if _is_likely_scene_heading(stripped):
                 clean_name = _extract_clean_character(stripped)
-                elements.append({
-                    "type": "scene_heading",
-                    "text": stripped,
-                    "line": line_no,
-                    "clean_name": clean_name,
-                })
+                elements.append(
+                    {
+                        "type": "scene_heading",
+                        "text": stripped,
+                        "line": line_no,
+                        "clean_name": clean_name,
+                    }
+                )
                 i += 1
                 continue
 
             # Transition detection
             if _is_likely_transition(stripped):
-                elements.append({
-                    "type": "transition",
-                    "text": stripped,
-                    "line": line_no,
-                    "clean_name": "",
-                })
+                elements.append(
+                    {
+                        "type": "transition",
+                        "text": stripped,
+                        "line": line_no,
+                        "clean_name": "",
+                    }
+                )
                 i += 1
                 continue
 
@@ -476,10 +573,7 @@ class FountainValidator:
             prev_blank = (
                 i == 0
                 or not lines[i - 1].strip()
-                or (
-                    elements
-                    and elements[-1]["type"] in ("scene_heading", "transition")
-                )
+                or (elements and elements[-1]["type"] in ("scene_heading", "transition"))
             )
             if (
                 prev_blank
@@ -490,51 +584,59 @@ class FountainValidator:
                 # Check for dual dialogue marker
                 is_dual = stripped.endswith("^")
                 clean = stripped.rstrip("^").strip()
-                elements.append({
-                    "type": "character",
-                    "text": stripped,
-                    "line": line_no,
-                    "clean_name": _extract_clean_character(clean),
-                    "dual": is_dual,
-                })
+                elements.append(
+                    {
+                        "type": "character",
+                        "text": stripped,
+                        "line": line_no,
+                        "clean_name": _extract_clean_character(clean),
+                        "dual": is_dual,
+                    }
+                )
                 last_char_line = line_no
                 i += 1
                 continue
 
             # Parenthetical
             if _PARENTHETICAL_RE.match(stripped):
-                elements.append({
-                    "type": "parenthetical",
-                    "text": stripped,
-                    "line": line_no,
-                    "clean_name": "",
-                })
+                elements.append(
+                    {
+                        "type": "parenthetical",
+                        "text": stripped,
+                        "line": line_no,
+                        "clean_name": "",
+                    }
+                )
                 i += 1
                 continue
 
             # Dialogue (indented or follow character/parenthetical/dialogue)
-            is_after_char = (
-                elements
-                and elements[-1]["type"]
-                in ("character", "parenthetical", "dialogue")
+            is_after_char = elements and elements[-1]["type"] in (
+                "character",
+                "parenthetical",
+                "dialogue",
             )
             if is_after_char:
-                elements.append({
-                    "type": "dialogue",
-                    "text": stripped,
-                    "line": line_no,
-                    "clean_name": "",
-                })
+                elements.append(
+                    {
+                        "type": "dialogue",
+                        "text": stripped,
+                        "line": line_no,
+                        "clean_name": "",
+                    }
+                )
                 i += 1
                 continue
 
             # Action (default)
-            elements.append({
-                "type": "action",
-                "text": stripped,
-                "line": line_no,
-                "clean_name": "",
-            })
+            elements.append(
+                {
+                    "type": "action",
+                    "text": stripped,
+                    "line": line_no,
+                    "clean_name": "",
+                }
+            )
             i += 1
 
         return elements
@@ -543,9 +645,7 @@ class FountainValidator:
     # Internal: Error checks
     # ------------------------------------------------------------------
 
-    def _check_boneyards(
-        self, text: str, errors: list[dict]
-    ) -> None:
+    def _check_boneyards(self, text: str, errors: list[dict]) -> None:
         """Check for unclosed boneyards (E8).
 
         SIDE EFFECT: Appends error dicts to the ``errors`` list.
@@ -553,12 +653,14 @@ class FountainValidator:
         opens = _BONEYARD_START_RE.findall(text)
         closes = _BONEYARD_END_RE.findall(text)
         if len(opens) > len(closes):
-            errors.append({
-                "code": "E8",
-                "message": "Unclosed boneyard (missing */)",
-                "text": text,
-                "line": 0,
-            })
+            errors.append(
+                {
+                    "code": "E8",
+                    "message": "Unclosed boneyard (missing */)",
+                    "text": text,
+                    "line": 0,
+                }
+            )
 
     def _check_notes(self, text: str, errors: list[dict]) -> None:
         """Check for unclosed notes (E9).
@@ -568,16 +670,16 @@ class FountainValidator:
         opens = _NOTE_START_RE.findall(text)
         closes = _NOTE_END_RE.findall(text)
         if len(opens) > len(closes):
-            errors.append({
-                "code": "E9",
-                "message": "Unclosed note (missing ]])",
-                "text": text,
-                "line": 0,
-            })
+            errors.append(
+                {
+                    "code": "E9",
+                    "message": "Unclosed note (missing ]])",
+                    "text": text,
+                    "line": 0,
+                }
+            )
 
-    def _check_scene_headings(
-        self, elements: list[dict], errors: list[dict]
-    ) -> None:
+    def _check_scene_headings(self, elements: list[dict], errors: list[dict]) -> None:
         """Check scene heading format (E1, E2).
 
         SIDE EFFECT: Appends error dicts to the ``errors`` list.
@@ -588,20 +690,24 @@ class FountainValidator:
             text = el["text"]
             # E1: missing prefix
             if not _SCENE_PREFIX_RE.match(text):
-                errors.append({
-                    "code": "E1",
-                    "message": f"Scene heading missing INT/EXT prefix: {text!r}",
-                    "text": text,
-                    "line": el["line"],
-                })
+                errors.append(
+                    {
+                        "code": "E1",
+                        "message": f"Scene heading missing INT/EXT prefix: {text!r}",
+                        "text": text,
+                        "line": el["line"],
+                    }
+                )
             # E2: missing time-of-day
             if not _TIME_OF_DAY_RE.search(text):
-                errors.append({
-                    "code": "E2",
-                    "message": f"Scene heading missing time-of-day: {text!r}",
-                    "text": text,
-                    "line": el["line"],
-                })
+                errors.append(
+                    {
+                        "code": "E2",
+                        "message": f"Scene heading missing time-of-day: {text!r}",
+                        "text": text,
+                        "line": el["line"],
+                    }
+                )
 
     def _check_characters(
         self,
@@ -619,16 +725,16 @@ class FountainValidator:
             text = el["text"].rstrip("^").strip()
             # E4: not uppercase
             if text != text.upper():
-                errors.append({
-                    "code": "E4",
-                    "message": f"Character name not uppercase: {text!r}",
-                    "text": text,
-                    "line": el["line"],
-                })
+                errors.append(
+                    {
+                        "code": "E4",
+                        "message": f"Character name not uppercase: {text!r}",
+                        "text": text,
+                        "line": el["line"],
+                    }
+                )
 
-    def _check_transitions(
-        self, elements: list[dict], errors: list[dict]
-    ) -> None:
+    def _check_transitions(self, elements: list[dict], errors: list[dict]) -> None:
         """Check transition formatting (E5, E6).
 
         SIDE EFFECT: Appends error dicts to the ``errors`` list.
@@ -642,24 +748,26 @@ class FountainValidator:
             is_standard = upper in {t.upper() for t in _KNOWN_TRANSITIONS}
             has_to = upper.endswith("TO:") or upper.endswith(" TO")
             if not is_standard and not has_to:
-                errors.append({
-                    "code": "E5",
-                    "message": f"Transition not ending with TO:: {text!r}",
-                    "text": text,
-                    "line": el["line"],
-                })
+                errors.append(
+                    {
+                        "code": "E5",
+                        "message": f"Transition not ending with TO:: {text!r}",
+                        "text": text,
+                        "line": el["line"],
+                    }
+                )
             # E6: not uppercase
             if text != upper:
-                errors.append({
-                    "code": "E6",
-                    "message": f"Transition not uppercase: {text!r}",
-                    "text": text,
-                    "line": el["line"],
-                })
+                errors.append(
+                    {
+                        "code": "E6",
+                        "message": f"Transition not uppercase: {text!r}",
+                        "text": text,
+                        "line": el["line"],
+                    }
+                )
 
-    def _check_dialogue_context(
-        self, elements: list[dict], errors: list[dict]
-    ) -> None:
+    def _check_dialogue_context(self, elements: list[dict], errors: list[dict]) -> None:
         """Check for orphaned dialogue without character (E3).
 
         SIDE EFFECT: Appends error dicts to the ``errors`` list.
@@ -683,16 +791,16 @@ class FountainValidator:
                 ):
                     break
             if not has_char_before:
-                errors.append({
-                    "code": "E3",
-                    "message": f"Orphaned dialogue (no preceding character): {el['text']!r}",
-                    "text": el["text"],
-                    "line": el["line"],
-                })
+                errors.append(
+                    {
+                        "code": "E3",
+                        "message": f"Orphaned dialogue (no preceding character): {el['text']!r}",
+                        "text": el["text"],
+                        "line": el["line"],
+                    }
+                )
 
-    def _check_parentheticals(
-        self, elements: list[dict], errors: list[dict]
-    ) -> None:
+    def _check_parentheticals(self, elements: list[dict], errors: list[dict]) -> None:
         """Check for parenthetical outside dialogue context (E7).
 
         SIDE EFFECT: Appends error dicts to the ``errors`` list.
@@ -703,28 +811,22 @@ class FountainValidator:
             # A parenthetical should be preceded by character or dialogue
             # and followed by dialogue
             prev_type = elements[i - 1]["type"] if i > 0 else None
-            next_type = (
-                elements[i + 1]["type"]
-                if i + 1 < len(elements)
-                else None
-            )
+            next_type = elements[i + 1]["type"] if i + 1 < len(elements) else None
 
             valid_prev = prev_type in ("character", "dialogue", None)
             valid_next = next_type in ("dialogue", "parenthetical", None)
 
             if not (valid_prev and valid_next):
-                errors.append({
-                    "code": "E7",
-                    "message": (
-                        f"Parenthetical outside dialogue context: {el['text']!r}"
-                    ),
-                    "text": el["text"],
-                    "line": el["line"],
-                })
+                errors.append(
+                    {
+                        "code": "E7",
+                        "message": (f"Parenthetical outside dialogue context: {el['text']!r}"),
+                        "text": el["text"],
+                        "line": el["line"],
+                    }
+                )
 
-    def _check_scene_numbers(
-        self, elements: list[dict], errors: list[dict]
-    ) -> None:
+    def _check_scene_numbers(self, elements: list[dict], errors: list[dict]) -> None:
         """Check scene number format (E12).
 
         Valid scene numbers match the pattern ``#[A-Za-z0-9]+#``.
@@ -745,16 +847,16 @@ class FountainValidator:
             valid_pairs = re.findall(r"#[A-Za-z0-9]+#", text)
             valid_hashes = sum(2 for _ in valid_pairs)  # 2 # per pair
             if len(hash_positions) != valid_hashes:
-                errors.append({
-                    "code": "E12",
-                    "message": f"Invalid scene number format in: {text!r}",
-                    "text": text,
-                    "line": el["line"],
-                })
+                errors.append(
+                    {
+                        "code": "E12",
+                        "message": f"Invalid scene number format in: {text!r}",
+                        "text": text,
+                        "line": el["line"],
+                    }
+                )
 
-    def _check_dual_dialogue(
-        self, elements: list[dict], errors: list[dict]
-    ) -> None:
+    def _check_dual_dialogue(self, elements: list[dict], errors: list[dict]) -> None:
         """Check for unpaired dual dialogue markers (E11).
 
         Dual dialogue characters should come in pairs (two per dialogue
@@ -763,26 +865,22 @@ class FountainValidator:
         SIDE EFFECT: Appends error dicts to the ``errors`` list.
         """
         dual_chars: list[dict] = [
-            el for el in elements
-            if el["type"] == "character" and el.get("dual")
+            el for el in elements if el["type"] == "character" and el.get("dual")
         ]
 
         if len(dual_chars) % 2 != 0:
             # The last unpaired dual character is flagged
             unpaired = dual_chars[-1]
-            errors.append({
-                "code": "E11",
-                "message": (
-                    "Dual dialogue marker '^' without matching"
-                    " second character"
-                ),
-                "text": unpaired["text"],
-                "line": unpaired["line"],
-            })
+            errors.append(
+                {
+                    "code": "E11",
+                    "message": ("Dual dialogue marker '^' without matching second character"),
+                    "text": unpaired["text"],
+                    "line": unpaired["line"],
+                }
+            )
 
-    def _check_character_consistency(
-        self, elements: list[dict], errors: list[dict]
-    ) -> None:
+    def _check_character_consistency(self, elements: list[dict], errors: list[dict]) -> None:
         """Check for character name inconsistencies (E10).
 
         Flags when the same base character name appears with different
@@ -809,24 +907,20 @@ class FountainValidator:
 
         for key, variants in char_map.items():
             if len(variants) > 1:
-                errors.append({
-                    "code": "E10",
-                    "message": (
-                        f"Character name inconsistency:"
-                        f" {' / '.join(variants)}"
-                    ),
-                    "text": " / ".join(variants),
-                    "line": 0,
-                })
-
+                errors.append(
+                    {
+                        "code": "E10",
+                        "message": (f"Character name inconsistency: {' / '.join(variants)}"),
+                        "text": " / ".join(variants),
+                        "line": 0,
+                    }
+                )
 
     # ------------------------------------------------------------------
     # Extended Fountain 1.1 feature checks (E13-E20)
     # ------------------------------------------------------------------
 
-    def _check_centered_text(
-        self, lines: list[str], errors: list[dict]
-    ) -> None:
+    def _check_centered_text(self, lines: list[str], errors: list[dict]) -> None:
         """Check centered text formatting (E13).
 
         Centered text must follow the ``>text<`` pattern with content
@@ -842,23 +936,25 @@ class FountainValidator:
                 # Check there's actual content between markers
                 inner = stripped[1:-1].strip()
                 if not inner:
-                    errors.append({
-                        "code": "E13",
-                        "message": "Centered text is empty (> <)",
-                        "text": stripped,
-                        "line": i + 1,
-                    })
+                    errors.append(
+                        {
+                            "code": "E13",
+                            "message": "Centered text is empty (> <)",
+                            "text": stripped,
+                            "line": i + 1,
+                        }
+                    )
                 elif inner != inner.strip():
-                    errors.append({
-                        "code": "E13",
-                        "message": "Centered text has extra whitespace around content",
-                        "text": stripped,
-                        "line": i + 1,
-                    })
+                    errors.append(
+                        {
+                            "code": "E13",
+                            "message": "Centered text has extra whitespace around content",
+                            "text": stripped,
+                            "line": i + 1,
+                        }
+                    )
 
-    def _check_sections(
-        self, lines: list[str], errors: list[dict]
-    ) -> None:
+    def _check_sections(self, lines: list[str], errors: list[dict]) -> None:
         """Check section heading formatting (E14).
 
         Sections start with ``#`` followed by a space and text.
@@ -873,24 +969,26 @@ class FountainValidator:
                 # Valid section - ensure it has text after the #
                 text_after = stripped.lstrip("#").strip()
                 if not text_after:
-                    errors.append({
-                        "code": "E14",
-                        "message": "Section heading is empty",
-                        "text": stripped,
-                        "line": i + 1,
-                    })
+                    errors.append(
+                        {
+                            "code": "E14",
+                            "message": "Section heading is empty",
+                            "text": stripped,
+                            "line": i + 1,
+                        }
+                    )
             elif stripped.startswith("#") and not _SECTION_RE.match(stripped):
                 # Hash without space
-                errors.append({
-                    "code": "E14",
-                    "message": "Section heading missing space after #",
-                    "text": stripped,
-                    "line": i + 1,
-                })
+                errors.append(
+                    {
+                        "code": "E14",
+                        "message": "Section heading missing space after #",
+                        "text": stripped,
+                        "line": i + 1,
+                    }
+                )
 
-    def _check_synopses(
-        self, lines: list[str], errors: list[dict]
-    ) -> None:
+    def _check_synopses(self, lines: list[str], errors: list[dict]) -> None:
         """Check synopsis formatting (E15).
 
         Synopses start with ``=`` followed by a space and text.
@@ -904,23 +1002,25 @@ class FountainValidator:
             if _SYNOPSIS_RE.match(stripped):
                 text_after = stripped[1:].strip()
                 if not text_after:
-                    errors.append({
+                    errors.append(
+                        {
+                            "code": "E15",
+                            "message": "Synopsis text is empty",
+                            "text": stripped,
+                            "line": i + 1,
+                        }
+                    )
+            elif stripped.startswith("=") and not _SYNOPSIS_RE.match(stripped):
+                errors.append(
+                    {
                         "code": "E15",
-                        "message": "Synopsis text is empty",
+                        "message": "Synopsis missing space after =",
                         "text": stripped,
                         "line": i + 1,
-                    })
-            elif stripped.startswith("=") and not _SYNOPSIS_RE.match(stripped):
-                errors.append({
-                    "code": "E15",
-                    "message": "Synopsis missing space after =",
-                    "text": stripped,
-                    "line": i + 1,
-                })
+                    }
+                )
 
-    def _check_lyrics(
-        self, lines: list[str], errors: list[dict]
-    ) -> None:
+    def _check_lyrics(self, lines: list[str], errors: list[dict]) -> None:
         """Check lyric line formatting (E16).
 
         Lyrics start with ``~`` followed immediately by text.
@@ -933,16 +1033,16 @@ class FountainValidator:
                 continue
             text_after = stripped[1:].strip()
             if not text_after:
-                errors.append({
-                    "code": "E16",
-                    "message": "Lyric text is empty",
-                    "text": stripped,
-                    "line": i + 1,
-                })
+                errors.append(
+                    {
+                        "code": "E16",
+                        "message": "Lyric text is empty",
+                        "text": stripped,
+                        "line": i + 1,
+                    }
+                )
 
-    def _check_page_breaks(
-        self, lines: list[str], errors: list[dict]
-    ) -> None:
+    def _check_page_breaks(self, lines: list[str], errors: list[dict]) -> None:
         """Check page break formatting (E17).
 
         Page breaks are denoted by a line containing ``===``.
@@ -954,16 +1054,16 @@ class FountainValidator:
             if not stripped:
                 continue
             if "===" in stripped and not _PAGE_BREAK_RE.match(stripped):
-                errors.append({
-                    "code": "E17",
-                    "message": "Page break must be exactly === on its own line",
-                    "text": stripped,
-                    "line": i + 1,
-                })
+                errors.append(
+                    {
+                        "code": "E17",
+                        "message": "Page break must be exactly === on its own line",
+                        "text": stripped,
+                        "line": i + 1,
+                    }
+                )
 
-    def _check_forced_elements(
-        self, lines: list[str], errors: list[dict]
-    ) -> None:
+    def _check_forced_elements(self, lines: list[str], errors: list[dict]) -> None:
         """Check forced element formatting (E18-E19).
 
         Forced scene heading: ``.TEXT``
@@ -982,55 +1082,63 @@ class FountainValidator:
             if stripped.startswith("."):
                 text_after = stripped[1:].strip()
                 if not text_after:
-                    errors.append({
-                        "code": "E18",
-                        "message": "Forced scene heading is empty after '.'",
-                        "text": stripped,
-                        "line": i + 1,
-                    })
+                    errors.append(
+                        {
+                            "code": "E18",
+                            "message": "Forced scene heading is empty after '.'",
+                            "text": stripped,
+                            "line": i + 1,
+                        }
+                    )
                 elif not text_after[0].isupper():
-                    errors.append({
-                        "code": "E18",
-                        "message": "Forced scene heading should start with uppercase letter",
-                        "text": stripped,
-                        "line": i + 1,
-                    })
+                    errors.append(
+                        {
+                            "code": "E18",
+                            "message": "Forced scene heading should start with uppercase letter",
+                            "text": stripped,
+                            "line": i + 1,
+                        }
+                    )
                 continue
 
             # Forced action (!PREFIX)
             if stripped.startswith("!"):
                 text_after = stripped[1:].strip()
                 if not text_after:
-                    errors.append({
-                        "code": "E19",
-                        "message": "Forced action is empty after '!'",
-                        "text": stripped,
-                        "line": i + 1,
-                    })
+                    errors.append(
+                        {
+                            "code": "E19",
+                            "message": "Forced action is empty after '!'",
+                            "text": stripped,
+                            "line": i + 1,
+                        }
+                    )
                 continue
 
             # Forced character (@PREFIX)
             if stripped.startswith("@"):
                 text_after = stripped[1:].strip()
                 if not text_after:
-                    errors.append({
-                        "code": "E19",
-                        "message": "Forced character is empty after '@'",
-                        "text": stripped,
-                        "line": i + 1,
-                    })
+                    errors.append(
+                        {
+                            "code": "E19",
+                            "message": "Forced character is empty after '@'",
+                            "text": stripped,
+                            "line": i + 1,
+                        }
+                    )
                 elif text_after[0].isalpha() and not text_after[0].isupper():
-                    errors.append({
-                        "code": "E19",
-                        "message": "Forced character name should start with uppercase",
-                        "text": stripped,
-                        "line": i + 1,
-                    })
+                    errors.append(
+                        {
+                            "code": "E19",
+                            "message": "Forced character name should start with uppercase",
+                            "text": stripped,
+                            "line": i + 1,
+                        }
+                    )
                 continue
 
-    def _check_emphasis(
-        self, lines: list[str], errors: list[dict]
-    ) -> None:
+    def _check_emphasis(self, lines: list[str], errors: list[dict]) -> None:
         """Check emphasis formatting (E20).
 
         Bold: ``**text**``
@@ -1047,40 +1155,44 @@ class FountainValidator:
             # Check for unclosed bold
             bold_starts = [m.start() for m in re.finditer(r"\*\*", stripped)]
             if len(bold_starts) % 2 != 0:
-                errors.append({
-                    "code": "E20",
-                    "message": "Unclosed bold formatting (**)",
-                    "text": stripped,
-                    "line": i + 1,
-                })
+                errors.append(
+                    {
+                        "code": "E20",
+                        "message": "Unclosed bold formatting (**)",
+                        "text": stripped,
+                        "line": i + 1,
+                    }
+                )
 
             # Check for unclosed italic
             italic_starts = [m.start() for m in re.finditer(r"(?<!\*)\*(?!\*)", stripped)]
             if len(italic_starts) % 2 != 0:
-                errors.append({
-                    "code": "E20",
-                    "message": "Unclosed italic formatting (*)",
-                    "text": stripped,
-                    "line": i + 1,
-                })
+                errors.append(
+                    {
+                        "code": "E20",
+                        "message": "Unclosed italic formatting (*)",
+                        "text": stripped,
+                        "line": i + 1,
+                    }
+                )
 
             # Check for unclosed underline
             under_starts = [m.start() for m in re.finditer(r"_", stripped)]
             if len(under_starts) % 2 != 0:
-                errors.append({
-                    "code": "E20",
-                    "message": "Unclosed underline formatting (_)",
-                    "text": stripped,
-                    "line": i + 1,
-                })
+                errors.append(
+                    {
+                        "code": "E20",
+                        "message": "Unclosed underline formatting (_)",
+                        "text": stripped,
+                        "line": i + 1,
+                    }
+                )
 
     # ------------------------------------------------------------------
     # Internal: Raw-line scans (catches what the parser misses)
     # ------------------------------------------------------------------
 
-    def _check_raw_scene_heading_lines(
-        self, lines: list[str], errors: list[dict]
-    ) -> None:
+    def _check_raw_scene_heading_lines(self, lines: list[str], errors: list[dict]) -> None:
         """Scan all lines for text that looks like a scene heading but
         lacks the INT/EXT prefix (E1).
 
@@ -1098,25 +1210,25 @@ class FountainValidator:
             if _SCENE_PREFIX_RE.match(stripped):
                 continue
             # Skip title-page key:value lines
-            if re.match(r"^(Title|Author|Source|Draft|Date|Contact|Copyright):",
-                        stripped, re.IGNORECASE):
+            if re.match(
+                r"^(Title|Author|Source|Draft|Date|Contact|Copyright):", stripped, re.IGNORECASE
+            ):
                 continue
             # Check for "WORD - WORD" or "WORD WORD - WORD" pattern
             # (looks like LOCATION - TIME)
-            if (
-                re.match(r"^[A-Za-z][A-Za-z\s\.]+-\s*[A-Za-z]+", stripped)
-                and _TIME_OF_DAY_RE.search(stripped)
-            ):
-                errors.append({
-                    "code": "E1",
-                    "message": f"Scene heading missing INT/EXT prefix: {stripped!r}",
-                    "text": stripped,
-                    "line": i + 1,
-                })
+            if re.match(
+                r"^[A-Za-z][A-Za-z\s\.]+-\s*[A-Za-z]+", stripped
+            ) and _TIME_OF_DAY_RE.search(stripped):
+                errors.append(
+                    {
+                        "code": "E1",
+                        "message": f"Scene heading missing INT/EXT prefix: {stripped!r}",
+                        "text": stripped,
+                        "line": i + 1,
+                    }
+                )
 
-    def _check_raw_possible_characters(
-        self, lines: list[str], errors: list[dict]
-    ) -> None:
+    def _check_raw_possible_characters(self, lines: list[str], errors: list[dict]) -> None:
         """Scan for lines that look like lowercase character names (E4).
 
         A likely character name is a short line (1-3 words), capitalized
@@ -1138,8 +1250,9 @@ class FountainValidator:
             if not words or len(words) > 4:
                 continue
             # Skip title-page key:value lines
-            if re.match(r"^(Title|Author|Source|Draft|Date|Contact|Copyright):",
-                        stripped, re.IGNORECASE):
+            if re.match(
+                r"^(Title|Author|Source|Draft|Date|Contact|Copyright):", stripped, re.IGNORECASE
+            ):
                 continue
             # Skip if it's a scene heading, transition, or parenthetical
             if _is_likely_scene_heading(stripped):
@@ -1150,9 +1263,7 @@ class FountainValidator:
                 continue
             # Must be preceded by blank line or scene heading / transition
             prev_blank = (
-                i == 0
-                or not lines[i - 1].strip()
-                or _is_likely_scene_heading(lines[i - 1].strip())
+                i == 0 or not lines[i - 1].strip() or _is_likely_scene_heading(lines[i - 1].strip())
             )
             if not prev_blank:
                 continue
@@ -1161,16 +1272,16 @@ class FountainValidator:
                 next_text = lines[i + 1].strip()
                 if next_text != next_text.upper() or len(next_text) > 50:
                     # This looks like a character name that isn't uppercase
-                    errors.append({
-                        "code": "E4",
-                        "message": f"Character name not uppercase: {stripped!r}",
-                        "text": stripped,
-                        "line": i + 1,
-                    })
+                    errors.append(
+                        {
+                            "code": "E4",
+                            "message": f"Character name not uppercase: {stripped!r}",
+                            "text": stripped,
+                            "line": i + 1,
+                        }
+                    )
 
-    def _check_raw_transitions(
-        self, lines: list[str], errors: list[dict]
-    ) -> None:
+    def _check_raw_transitions(self, lines: list[str], errors: list[dict]) -> None:
         """Scan raw lines for potential transitions that E5/E6 apply to.
 
         Catches ALL CAPS lines that look like transitions but were not
@@ -1190,9 +1301,7 @@ class FountainValidator:
                 continue
             # Must be preceded by blank line or start of section
             prev_blank = (
-                i == 0
-                or not lines[i - 1].strip()
-                or _is_likely_scene_heading(lines[i - 1].strip())
+                i == 0 or not lines[i - 1].strip() or _is_likely_scene_heading(lines[i - 1].strip())
             )
             if not prev_blank:
                 continue
@@ -1209,19 +1318,17 @@ class FountainValidator:
             has_to = upper.endswith("TO:") or upper.endswith(" TO")
             # E5: not ending with TO: (skip standard transitions)
             if not is_standard and not has_to:
-                errors.append({
-                    "code": "E5",
-                    "message": (
-                        f"Transition not ending with TO:: {stripped!r}"
-                    ),
-                    "text": stripped,
-                    "line": i + 1,
-                })
+                errors.append(
+                    {
+                        "code": "E5",
+                        "message": (f"Transition not ending with TO:: {stripped!r}"),
+                        "text": stripped,
+                        "line": i + 1,
+                    }
+                )
             # E6: not uppercase (already checked above, so won't fire here)
 
-    def _check_raw_possible_dialogue(
-        self, lines: list[str], errors: list[dict]
-    ) -> None:
+    def _check_raw_possible_dialogue(self, lines: list[str], errors: list[dict]) -> None:
         """Scan for text that looks like dialogue but has no character (E3).
 
         Walks backwards past blank lines to check if a line follows a scene
@@ -1262,8 +1369,8 @@ class FountainValidator:
             #   - Ends with ? or !
             #   - Starts with an interjection or conversational words
             is_dialogue_like = (
-                stripped.startswith(("\"", "'", "``"))
-                or stripped.endswith(("\"", "'", "''"))
+                stripped.startswith(('"', "'", "``"))
+                or stripped.endswith(('"', "'", "''"))
                 or stripped.endswith(("?", "!"))
                 or re.match(
                     r"^(Well|Oh|Hey|Hi|Hello|Yeah|No|Yes|Okay|Sure|Sorry|"
@@ -1274,15 +1381,14 @@ class FountainValidator:
                 )
             )
             if is_dialogue_like:
-                errors.append({
-                    "code": "E3",
-                    "message": (
-                        f"Orphaned dialogue (no preceding character):"
-                        f" {stripped!r}"
-                    ),
-                    "text": stripped,
-                    "line": i + 1,
-                })
+                errors.append(
+                    {
+                        "code": "E3",
+                        "message": (f"Orphaned dialogue (no preceding character): {stripped!r}"),
+                        "text": stripped,
+                        "line": i + 1,
+                    }
+                )
 
 
 # ---------------------------------------------------------------------------

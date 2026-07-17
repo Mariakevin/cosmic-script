@@ -469,6 +469,110 @@ Hello."""
         result = self.validator.auto_fix(text)
         assert result == text
 
+    # --- New auto-fix rules ---
+
+    def test_auto_fix_missing_scene_heading_prefix(self):
+        """Line that looks like a scene heading but lacks INT/EXT prefix gets 'INT. ' added."""
+        text = """HOUSE - DAY
+
+John enters."""
+        result = self.validator.auto_fix(text)
+        # Should become INT. HOUSE - DAY
+        assert "INT. HOUSE - DAY" in result
+        # Ensure it's a scene heading prefix
+        for line in result.split("\n"):
+            if "HOUSE - DAY" in line:
+                assert line.startswith("INT.") or line.startswith("EXT.")
+                break
+        else:
+            pytest.fail("Scene heading not found in fixed text")
+
+    def test_auto_fix_missing_time_of_day(self):
+        """Scene heading with location but no time-of-day gets ' - DAY' appended."""
+        text = """INT. OFFICE
+
+John sits."""
+        result = self.validator.auto_fix(text)
+        # Should become INT. OFFICE - DAY
+        assert "INT. OFFICE - DAY" in result
+
+    def test_auto_fix_unformatted_transition(self):
+        """Unformatted transition 'cut to:' becomes 'CUT TO:'."""
+        text = """cut to:
+
+INT. ROOM - DAY
+
+John sits."""
+        result = self.validator.auto_fix(text)
+        # Expect uppercase transition
+        assert "CUT TO:" in result
+        # Ensure it's exactly CUT TO: (maybe with extra spaces)
+        for line in result.split("\n"):
+            stripped = line.strip()
+            if stripped.startswith("CUT TO"):
+                assert stripped == "CUT TO:"
+                break
+        else:
+            pytest.fail("Transition not found in fixed text")
+
+    def test_auto_fix_missing_blank_line_before_character(self):
+        """Character cue following action without blank line gets blank line inserted."""
+        text = """INT. ROOM - DAY
+
+John walks in.
+JOHN
+Hello."""
+        result = self.validator.auto_fix(text)
+        lines = result.split("\n")
+        # Find the line with JOHN and ensure previous line is blank
+        for i, line in enumerate(lines):
+            if line.strip() == "JOHN":
+                # Check previous line is blank (empty or whitespace only)
+                assert lines[i - 1].strip() == "", (
+                    f"Expected blank line before JOHN, got: {lines[i - 1]!r}"
+                )
+                break
+        else:
+            pytest.fail("Character cue JOHN not found")
+
+    def test_auto_fix_excessive_blank_lines(self):
+        """Three or more consecutive blank lines collapse to two."""
+        text = """INT. ROOM - DAY
+
+
+
+John sits."""
+        result = self.validator.auto_fix(text)
+        # Count blank lines between scene heading and action
+        lines = result.split("\n")
+        # Find the scene heading line index
+        scene_idx = None
+        for i, line in enumerate(lines):
+            if "INT. ROOM - DAY" in line:
+                scene_idx = i
+                break
+        assert scene_idx is not None
+        # Count blank lines after scene heading until non-blank
+        blank_count = 0
+        j = scene_idx + 1
+        while j < len(lines) and lines[j].strip() == "":
+            blank_count += 1
+            j += 1
+        # Should be at most 2 blank lines
+        assert blank_count <= 2, f"Expected <=2 blank lines, got {blank_count}"
+
+    def test_auto_fix_trailing_whitespace(self):
+        """Trailing spaces are stripped from all lines."""
+        text = """INT. ROOM - DAY   
+
+JOHN   
+Hello.   """
+        result = self.validator.auto_fix(text)
+        for line in result.split("\n"):
+            # No line should end with spaces (except maybe empty lines)
+            if line.strip():
+                assert not line.endswith(" "), f"Line has trailing whitespace: {line!r}"
+
 
 class TestExtendedFountainFeatures:
     """Tests for Fountain 1.1 extended features (E13-E20)."""

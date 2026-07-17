@@ -1,7 +1,7 @@
 """Multi-format screenplay export.
 
-Provides unified export functionality supporting Fountain and plain-text
-formats with automatic validation and fix-up of output.
+Provides unified export functionality supporting Fountain, plain-text,
+and FDX formats with automatic validation and fix-up of output.
 """
 
 from __future__ import annotations
@@ -16,6 +16,7 @@ from cosmic_script.export.validator import FountainValidator
 SUPPORTED_FORMATS: dict[str, str] = {
     "fountain": ".fountain",
     "txt": ".txt",
+    "fdx": ".fdx",
 }
 
 
@@ -34,7 +35,7 @@ def export_screenplay(
         screenplay: The screenplay data model to export.
         output_path: Filesystem path where the output file will be written.
         fmt: Output format identifier. Supported values are ``"fountain"``
-            (default) and ``"txt"``.
+            (default), ``"txt"``, and ``"fdx"``.
 
     Returns:
         The absolute path to the saved file.
@@ -50,8 +51,7 @@ def export_screenplay(
     """
     if fmt not in SUPPORTED_FORMATS:
         raise ValueError(
-            f"Unsupported format: {fmt!r}. "
-            f"Supported formats: {', '.join(SUPPORTED_FORMATS)}"
+            f"Unsupported format: {fmt!r}. Supported formats: {', '.join(SUPPORTED_FORMATS)}"
         )
 
     # Generate output text
@@ -59,6 +59,8 @@ def export_screenplay(
         raw_text = generate_fountain(screenplay)
     elif fmt == "txt":
         raw_text = _generate_plain_text(screenplay)
+    elif fmt == "fdx":
+        raw_text = _generate_fdx(screenplay)
     else:
         raise ValueError(f"Unsupported format: {fmt!r}")
 
@@ -138,9 +140,7 @@ def _generate_plain_text(screenplay: Screenplay) -> str:
     return "\n".join(lines).strip()
 
 
-def _ensure_trailing_blank_line(
-    lines: list[str], prev_type: str | None
-) -> None:
+def _ensure_trailing_blank_line(lines: list[str], prev_type: str | None) -> None:
     """Append a blank line when needed between blocks.
 
     Args:
@@ -149,3 +149,66 @@ def _ensure_trailing_blank_line(
     """
     if lines and lines[-1] != "":
         lines.append("")
+
+
+def _generate_fdx(screenplay: Screenplay) -> str:
+    """Generate an FDX (Final Draft XML) representation of the screenplay.
+
+    Uses the ``screenplay-tools`` FDX.Writer to produce spec-compliant FDX XML.
+    Maps our internal ScreenplayElement types to screenplay-tools Script elements.
+
+    Args:
+        screenplay: The screenplay data model to export.
+
+    Returns:
+        FDX XML string.
+    """
+    from screenplay_tools.fdx.writer import Writer
+    from screenplay_tools.screenplay import (
+        Script as StScript,
+        SceneHeading as StSceneHeading,
+        Action as StAction,
+        Character as StCharacter,
+        Dialogue as StDialogue,
+        Parenthetical as StParenthetical,
+        Transition as StTransition,
+    )
+
+    script = StScript()
+
+    # Add title entry if available
+    if screenplay.title:
+        from screenplay_tools.screenplay import TitleEntry
+
+        script.titleEntries.append(TitleEntry("Title", screenplay.title))
+    if screenplay.author:
+        from screenplay_tools.screenplay import TitleEntry
+
+        script.titleEntries.append(TitleEntry("Author", screenplay.author))
+
+    # Map our element types to screenplay-tools elements
+    _ELEMENT_MAP = {
+        "scene_heading": lambda text: StSceneHeading(text),
+        "action": lambda text: StAction(text),
+        "character": lambda text: StCharacter(text.upper()),
+        "dialogue": lambda text: StDialogue(text),
+        "parenthetical": lambda text: StParenthetical(text),
+        "transition": lambda text: StTransition(text),
+    }
+
+    for element in screenplay.elements:
+        text = element.text.strip()
+        if not text:
+            continue
+
+        et = (
+            element.element_type.value
+            if hasattr(element.element_type, "value")
+            else element.element_type
+        )
+        factory = _ELEMENT_MAP.get(et)
+        if factory:
+            script.add_element(factory(text))
+
+    writer = Writer()
+    return writer.write(script)

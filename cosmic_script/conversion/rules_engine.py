@@ -22,24 +22,177 @@ from cosmic_script.conversion.registry import CharacterRegistry
 
 # ── Constants ────────────────────────────────────────────────────────────────
 
-_INT_KEYWORDS: frozenset[str] = frozenset({
-    "office", "room", "house", "apartment", "car", "building", "hall",
-    "kitchen", "bedroom", "hospital", "school", "restaurant", "bar",
-    "shop", "store", "library", "church", "prison", "cell", "bathroom",
-    "corridor", "lobby", "den", "attic", "basement", "garage", "studio",
-    "flat", "dorm", "hotel", "motel", "theater", "theatre",
-    "cafe", "diner", "washroom", "closet", "tent",
-})
+_INT_KEYWORDS: frozenset[str] = frozenset(
+    {
+        "office",
+        "room",
+        "house",
+        "apartment",
+        "car",
+        "building",
+        "hall",
+        "kitchen",
+        "bedroom",
+        "hospital",
+        "school",
+        "restaurant",
+        "bar",
+        "shop",
+        "store",
+        "library",
+        "church",
+        "prison",
+        "cell",
+        "bathroom",
+        "corridor",
+        "lobby",
+        "den",
+        "attic",
+        "basement",
+        "garage",
+        "studio",
+        "flat",
+        "dorm",
+        "hotel",
+        "motel",
+        "theater",
+        "theatre",
+        "cafe",
+        "diner",
+        "washroom",
+        "closet",
+        "tent",
+        "spaceship",
+        "cockpit",
+        "bridge",
+        "cabin",
+        "elevator",
+        "stairwell",
+        "lab",
+        "courtroom",
+        "jury room",
+        "dressing room",
+        "backstage",
+        "green room",
+        "waiting room",
+        "exam room",
+        "operating room",
+        "icu",
+        "ward",
+        "reception",
+        "penthouse",
+        "cottage",
+        "yurt",
+        "igloo",
+        "bunker",
+        "shelter",
+        "vault",
+        "archive",
+        "warehouse",
+        "factory",
+        "plant",
+        "mill",
+        "foundry",
+        "workshop",
+        "atelier",
+        "cubicle",
+        "conference room",
+        "boardroom",
+        "break room",
+        "cafeteria",
+        "pantry",
+        "alcove",
+        "conservatory",
+        "sunroom",
+        "nursery",
+        "playroom",
+        "study",
+    }
+)
 
-_EXT_KEYWORDS: frozenset[str] = frozenset({
-    "park", "street", "road", "garden", "forest", "field", "mountain",
-    "beach", "river", "lake", "sky", "yard", "sidewalk", "rooftop",
-    "courtyard", "alley", "bridge", "highway", "highway", "desert",
-    "jungle", "swamp", "meadow", "cliff", "canyon", "valley", "hill",
-    "pond", "ocean", "sea", "island", "shore", "coast", "campground",
-    "cemetery", "playground", "parking", "lot", "driveway", "porch",
-    "balcony", "terrace", "patio", "lawn",
-})
+_EXT_KEYWORDS: frozenset[str] = frozenset(
+    {
+        "park",
+        "street",
+        "road",
+        "garden",
+        "forest",
+        "field",
+        "mountain",
+        "beach",
+        "river",
+        "lake",
+        "sky",
+        "yard",
+        "sidewalk",
+        "rooftop",
+        "courtyard",
+        "alley",
+        "bridge",
+        "highway",
+        "desert",
+        "jungle",
+        "swamp",
+        "meadow",
+        "cliff",
+        "canyon",
+        "valley",
+        "hill",
+        "pond",
+        "ocean",
+        "sea",
+        "island",
+        "shore",
+        "coast",
+        "campground",
+        "cemetery",
+        "playground",
+        "parking",
+        "lot",
+        "driveway",
+        "porch",
+        "balcony",
+        "terrace",
+        "patio",
+        "lawn",
+        "plaza",
+        "square",
+        "intersection",
+        "crosswalk",
+        "tunnel",
+        "underpass",
+        "overpass",
+        "viaduct",
+        "dam",
+        "pier",
+        "dock",
+        "harbor",
+        "port",
+        "marina",
+        "airfield",
+        "airstrip",
+        "helipad",
+        "launch pad",
+        "train tracks",
+        "railway",
+        "station",
+        "platform",
+        "bus stop",
+        "taxi stand",
+        "trail",
+        "path",
+        "bike lane",
+        "boardwalk",
+        "promenade",
+        "jetty",
+        "breakwater",
+        "seawall",
+        "levee",
+        "dike",
+        "causeway",
+        "cul-de-sac",
+    }
+)
 
 _TIME_KEYWORDS: dict[str, str] = {
     "morning": "MORNING",
@@ -93,6 +246,13 @@ _SECTION_BREAK_RE = re.compile(
     re.MULTILINE,
 )
 
+# Fountain element detection patterns
+_CENTERED_RE = re.compile(r"^>\s*.+\s*<$")
+_FOUNTAIN_SECTION_RE = re.compile(r"^#{1,6}\s+.+")
+_SYNOPSIS_RE = re.compile(r"^=\s*.+")
+_LYRIC_RE = re.compile(r"^~\s*.+")
+_PAGE_BREAK_RE = re.compile(r"^={3,}\s*$")
+
 # Weak signals (keep same scene)
 _CONTINUATION_WORDS_RE = re.compile(
     r"\b(?:meanwhile|at the same time|inside|outside|"
@@ -112,16 +272,23 @@ _INNER_THOUGHT_TAGS_RE = re.compile(
 # Dialogue extraction patterns
 _DIALOGUE_QUOTED_RE = re.compile(
     r'((?:"([^"]*)")|'
-    r'(\u201c([^\u201d]*)\u201d)|'
+    r"(\u201c([^\u201d]*)\u201d)|"
     r"('([^']*)'))",
     re.UNICODE,
 )
 
 # Attribution after: "dialogue" said/asked/etc. Name
 _DIALOGUE_ATTRIB_AFTER_RE = re.compile(
-    r'(?:said|asked|replied|answered|called|shouted|whispered|'
+    r"(?:said|asked|replied|answered|called|shouted|whispered|"
     r"yelled|exclaimed|muttered|cried|laughed|smiled|nodded|"
-    r"continued|began|started|added|finished)\s+"
+    r"continued|began|started|added|finished|"
+    r"murmured|breathed|sighed|mumbled|stammered|lisped|"
+    r"bellowed|roared|howled|barked|snapped|"
+    r"stated|declared|announced|proclaimed|mentioned|remarked|noted|observed|"
+    r"sobbed|wailed|gasped|choked|groaned|moaned|wept|cried out|"
+    r"blurted|blurted out|burst out|cut in|interjected|piped up|"
+    r"conceded|admitted|retorted|"
+    r"drawled|rambled|grumbled|groused|complained|griped)\s+"
     r"([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)",
 )
 
@@ -130,7 +297,14 @@ _DIALOGUE_ATTRIB_BEFORE_RE = re.compile(
     r"([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\s+"
     r"(?:said|asked|replied|answered|called|shouted|whispered|"
     r"yelled|exclaimed|muttered|cried|laughed|smiled|nodded|"
-    r"continued|began|started|added|finished)[,.\s]+"
+    r"continued|began|started|added|finished|"
+    r"murmured|breathed|sighed|mumbled|stammered|lisped|"
+    r"bellowed|roared|howled|barked|snapped|"
+    r"stated|declared|announced|proclaimed|mentioned|remarked|noted|observed|"
+    r"sobbed|wailed|gasped|choked|groaned|moaned|wept|cried out|"
+    r"blurted|blurted out|burst out|cut in|interjected|piped up|"
+    r"conceded|admitted|retorted|"
+    r"drawled|rambled|grumbled|groused|complained|griped)[,.\s]+"
     r"['\"\u201c]",
 )
 
@@ -150,16 +324,78 @@ _INTERRUPTED_RE = re.compile(
 )
 
 # Skip words for character names (common false positives)
-_NAME_SKIP_WORDS: frozenset[str] = frozenset({
-    "THE", "A", "AN", "AND", "OR", "BUT", "NOT", "IN", "ON",
-    "AT", "TO", "FOR", "OF", "WITH", "BY", "FROM", "AS", "IS", "IT",
-    "BE", "HE", "SHE", "WE", "THEY", "ME", "HIM", "HER", "US", "THEM",
-    "THIS", "THAT", "THESE", "THOSE", "WHAT", "WHEN", "WHERE", "WHY",
-    "HOW", "WHO", "WHICH", "SOME", "ALL", "MORE", "MOST", "JUST",
-    "VERY", "WELL", "SO", "IF", "THEN", "ELSE", "ALSO", "ONLY",
-    "YES", "NO", "OK", "OH", "AH", "UM", "HMM", "HEY", "HI",
-    "HELLO", "GOODBYE", "PLEASE", "THANKS", "SORRY", "WAIT",
-})
+_NAME_SKIP_WORDS: frozenset[str] = frozenset(
+    {
+        "THE",
+        "A",
+        "AN",
+        "AND",
+        "OR",
+        "BUT",
+        "NOT",
+        "IN",
+        "ON",
+        "AT",
+        "TO",
+        "FOR",
+        "OF",
+        "WITH",
+        "BY",
+        "FROM",
+        "AS",
+        "IS",
+        "IT",
+        "BE",
+        "HE",
+        "SHE",
+        "WE",
+        "THEY",
+        "ME",
+        "HIM",
+        "HER",
+        "US",
+        "THEM",
+        "THIS",
+        "THAT",
+        "THESE",
+        "THOSE",
+        "WHAT",
+        "WHEN",
+        "WHERE",
+        "WHY",
+        "HOW",
+        "WHO",
+        "WHICH",
+        "SOME",
+        "ALL",
+        "MORE",
+        "MOST",
+        "JUST",
+        "VERY",
+        "WELL",
+        "SO",
+        "IF",
+        "THEN",
+        "ELSE",
+        "ALSO",
+        "ONLY",
+        "YES",
+        "NO",
+        "OK",
+        "OH",
+        "AH",
+        "UM",
+        "HMM",
+        "HEY",
+        "HI",
+        "HELLO",
+        "GOODBYE",
+        "PLEASE",
+        "THANKS",
+        "SORRY",
+        "WAIT",
+    }
+)
 
 
 # ── Component 1: DialogueExtractor ──────────────────────────────────────────
@@ -185,9 +421,7 @@ class DialogueExtractor:
 
         for match in _DIALOGUE_QUOTED_RE.finditer(text):
             # Group 2 = straight double, group 4 = curly double, group 6 = single
-            dialogue_text = (
-                match.group(2) or match.group(4) or match.group(6) or ""
-            )
+            dialogue_text = match.group(2) or match.group(4) or match.group(6) or ""
             if not dialogue_text.strip():
                 continue
 
@@ -195,17 +429,17 @@ class DialogueExtractor:
             character = self._find_attribution(text, match.start(), match.end())
             vo = self._detect_vo(text, match.end())
 
-            results.append({
-                "character": character,
-                "text": dialogue_text.strip(),
-                "vo": vo,
-            })
+            results.append(
+                {
+                    "character": character,
+                    "text": dialogue_text.strip(),
+                    "vo": vo,
+                }
+            )
 
         return results
 
-    def _find_attribution(
-        self, text: str, quote_start: int, quote_end: int
-    ) -> str:
+    def _find_attribution(self, text: str, quote_start: int, quote_end: int) -> str:
         """Find character attribution near a quote.
 
         Checks after the quote first (more common), then before.
@@ -266,19 +500,23 @@ class SceneBreakDetector:
             curr_para = paragraphs[i]
 
             if self._is_scene_break(prev_para, curr_para):
-                scenes.append({
-                    "heading": "",  # Will be inferred later
-                    "paragraphs": current_paragraphs,
-                })
+                scenes.append(
+                    {
+                        "heading": "",  # Will be inferred later
+                        "paragraphs": current_paragraphs,
+                    }
+                )
                 current_paragraphs = [curr_para]
             else:
                 current_paragraphs.append(curr_para)
 
         # Don't forget the last group
-        scenes.append({
-            "heading": "",
-            "paragraphs": current_paragraphs,
-        })
+        scenes.append(
+            {
+                "heading": "",
+                "paragraphs": current_paragraphs,
+            }
+        )
 
         return scenes
 
@@ -383,6 +621,7 @@ class ActionFormatter:
         """Clean a paragraph for use as an action line.
 
         - Strips inner thought tags (he thought, she wondered, etc.)
+        - Condenses action lines (removes filter words, simplifies phrasing)
         - Preserves original tense (no conversion)
         - Returns cleaned text
         """
@@ -397,7 +636,103 @@ class ActionFormatter:
         # Clean up any double spaces left behind
         text = re.sub(r"\s{2,}", " ", text).strip()
 
+        # Condense action line
+        text = self._condense_action(text)
+
         return text
+
+    def _condense_action(self, text: str) -> str:
+        """Condense an action line for standard screenplay format.
+
+        - Removes filter words (very, really, quite, etc.)
+        - Removes unnecessary 'that' after verbs of cognition
+        - Simplifies 'began to' / 'started to'
+        - Removes redundant adverbs after speech verbs
+        - Truncates to ~58 chars (standard screenplay width)
+        """
+        if not text or not text.strip():
+            return ""
+
+        result = text.strip()
+
+        # Remove filter words
+        filter_words = ["very", "really", "quite", "somewhat", "rather", "fairly"]
+        for word in filter_words:
+            # Match the word as a whole token, case-insensitive
+            result = re.sub(rf"\b{word}\b\s*", "", result, flags=re.IGNORECASE)
+
+        # Remove unnecessary "that" after cognition verbs
+        # "He realized that she was gone" -> "He realized she was gone"
+        # But keep "that" when it's a demonstrative ("He grabbed that book")
+        cognition_verbs = (
+            r"(?:realized|thought|wondered|knew|felt|believed|imagined|"
+            r"recalled|remembered|decided|noticed|observed|saw|heard|"
+            r"understood|recognized|discovered|noticed|assumed|expected|"
+            r"hoped|feared|suspected|found|concluded)"
+        )
+        result = re.sub(
+            rf"({cognition_verbs})\s+that\b",
+            r"\1",
+            result,
+            flags=re.IGNORECASE,
+        )
+
+        # Simplify "began to" / "started to"
+        began_to_pattern = re.compile(r"\b(\w+)\s+began\s+to\b", re.IGNORECASE)
+        started_to_pattern = re.compile(r"\b(\w+)\s+started\s+to\b", re.IGNORECASE)
+
+        def _simplify_began_to(match: re.Match[str]) -> str:
+            subject = match.group(1)
+            # Extract the infinitive that follows "began to"
+            rest = match.group(0)
+            # "He began to run" -> "He ran"
+            # Find the word after "to "
+            after_to = rest[rest.lower().index("to") + 3 :]
+            verb = after_to.strip().split()[0] if after_to.strip() else ""
+            if not verb:
+                return match.group(0)
+            # Simple past tense: just use the verb as-is for now
+            # (full conjugation is complex; keep it simple)
+            return f"{subject} {verb}"
+
+        result = began_to_pattern.sub(_simplify_began_to, result)
+        result = started_to_pattern.sub(_simplify_began_to, result)
+
+        # Remove redundant adverbs after speech/action verbs
+        speech_verbs = (
+            r"(?:whispered|muttered|murmured|shouted|yelled|cried|"
+            r"exclaimed|stated|declared|announced|remarked|noted|"
+            r"observed|replied|answered|snapped|barked|roared|"
+            r"bellowed|howled|sobbed|wailed|gasped|choked|groaned|"
+            r"moaned|wept|blurted|drawled|grumbled|complained)"
+        )
+        redundant_adverbs = (
+            r"softly|loudly|quietly|angrily|calmly|gently|harshly|"
+            r"briefly|quickly|slowly|eagerly|happily|sadly|coldly|"
+            r"warmly|bitterly|sweetly|dryly|flatly|sharply|"
+            r"wearily|hollowly|thickly|hoarsely"
+        )
+        result = re.sub(
+            rf"({speech_verbs})\s+({redundant_adverbs})\b",
+            r"\1",
+            result,
+            flags=re.IGNORECASE,
+        )
+
+        # Clean up any double spaces left from removals
+        result = re.sub(r"\s{2,}", " ", result).strip()
+
+        # Truncate to ~58 chars (standard screenplay width) if longer
+        if len(result) > 62:
+            # Try to cut at a word boundary near 58 chars
+            truncated = result[:58]
+            last_space = truncated.rfind(" ")
+            if last_space > 40:
+                result = truncated[:last_space]
+            else:
+                result = truncated
+
+        return result
 
 
 # ── Component 5: FountainAssembler ──────────────────────────────────────────
@@ -447,9 +782,7 @@ class FountainAssembler:
 
                 if dialogues:
                     # Split paragraph into dialogue and action segments
-                    self._add_dialogue_segments(
-                        para, dialogues, content_parts, action_formatter
-                    )
+                    self._add_dialogue_segments(para, dialogues, content_parts, action_formatter)
                 else:
                     # Pure action
                     cleaned = action_formatter.format_paragraph(para)
@@ -481,9 +814,7 @@ class FountainAssembler:
         # Find quote positions in the paragraph
         quote_positions: list[tuple[int, int, dict[str, str | bool]]] = []
         for match in _DIALOGUE_QUOTED_RE.finditer(paragraph):
-            dialogue_text = (
-                match.group(2) or match.group(4) or match.group(6) or ""
-            )
+            dialogue_text = match.group(2) or match.group(4) or match.group(6) or ""
             if dialogue_text.strip():
                 # Find matching dialogue entry
                 for d in dialogues:
@@ -532,10 +863,12 @@ class FountainAssembler:
     ) -> None:
         """Convert a Scene's content string into ScreenplayElements."""
         # Add scene heading
-        elements.append(ScreenplayElement(
-            element_type=ElementType.SCENE_HEADING,
-            text=scene.heading,
-        ))
+        elements.append(
+            ScreenplayElement(
+                element_type=ElementType.SCENE_HEADING,
+                text=scene.heading,
+            )
+        )
 
         if not scene.content.strip():
             return
@@ -548,6 +881,61 @@ class FountainAssembler:
                 i += 1
                 continue
 
+            # Centered text: >text<
+            if _CENTERED_RE.match(line):
+                elements.append(
+                    ScreenplayElement(
+                        element_type=ElementType.CENTERED,
+                        text=line,
+                    )
+                )
+                i += 1
+                continue
+
+            # Section heading: # Title
+            if _FOUNTAIN_SECTION_RE.match(line):
+                elements.append(
+                    ScreenplayElement(
+                        element_type=ElementType.SECTION,
+                        text=line,
+                    )
+                )
+                i += 1
+                continue
+
+            # Synopsis: = text
+            if _SYNOPSIS_RE.match(line):
+                elements.append(
+                    ScreenplayElement(
+                        element_type=ElementType.SYNOPSIS,
+                        text=line,
+                    )
+                )
+                i += 1
+                continue
+
+            # Lyric: ~ text
+            if _LYRIC_RE.match(line):
+                elements.append(
+                    ScreenplayElement(
+                        element_type=ElementType.LYRIC,
+                        text=line,
+                    )
+                )
+                i += 1
+                continue
+
+            # Page break: ===
+            if _PAGE_BREAK_RE.match(line):
+                elements.append(
+                    ScreenplayElement(
+                        element_type=ElementType.PAGE_BREAK,
+                        text=line,
+                    )
+                )
+                i += 1
+                continue
+
             # Character cue (ALL CAPS, short line)
             if (
                 line == line.upper()
@@ -556,10 +944,12 @@ class FountainAssembler:
                 and not line.endswith("TO:")
                 and any(c.isalpha() for c in line)
             ):
-                elements.append(ScreenplayElement(
-                    element_type=ElementType.CHARACTER,
-                    text=line,
-                ))
+                elements.append(
+                    ScreenplayElement(
+                        element_type=ElementType.CHARACTER,
+                        text=line,
+                    )
+                )
                 i += 1
                 # Collect following dialogue lines
                 while i < len(lines):
@@ -568,28 +958,33 @@ class FountainAssembler:
                         i += 1
                         continue
                     if (
-                        dial_line == dial_line.upper()
-                        and len(dial_line) <= 30
+                        dial_line == dial_line.upper() and len(dial_line) <= 30
                     ) or dial_line.startswith(("INT.", "EXT.")):
                         break
                     if dial_line.startswith("(") and dial_line.endswith(")"):
-                        elements.append(ScreenplayElement(
-                            element_type=ElementType.PARENTHETICAL,
-                            text=dial_line,
-                        ))
+                        elements.append(
+                            ScreenplayElement(
+                                element_type=ElementType.PARENTHETICAL,
+                                text=dial_line,
+                            )
+                        )
                     else:
-                        elements.append(ScreenplayElement(
-                            element_type=ElementType.DIALOGUE,
-                            text=dial_line,
-                        ))
+                        elements.append(
+                            ScreenplayElement(
+                                element_type=ElementType.DIALOGUE,
+                                text=dial_line,
+                            )
+                        )
                     i += 1
                 continue
 
             # Default: action
-            elements.append(ScreenplayElement(
-                element_type=ElementType.ACTION,
-                text=line,
-            ))
+            elements.append(
+                ScreenplayElement(
+                    element_type=ElementType.ACTION,
+                    text=line,
+                )
+            )
             i += 1
 
 
@@ -685,15 +1080,11 @@ def convert_chapter_with_rules(
                 # Split around dialogue
                 quote_positions: list[tuple[int, int, dict]] = []
                 for match in _DIALOGUE_QUOTED_RE.finditer(para):
-                    dtext = (
-                        match.group(2) or match.group(4) or match.group(6) or ""
-                    )
+                    dtext = match.group(2) or match.group(4) or match.group(6) or ""
                     if dtext.strip():
                         for d in dialogues:
                             if d["text"] == dtext.strip():
-                                quote_positions.append(
-                                    (match.start(), match.end(), d)
-                                )
+                                quote_positions.append((match.start(), match.end(), d))
                                 break
 
                 last_end = 0

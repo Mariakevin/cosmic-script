@@ -123,3 +123,60 @@ class TestLoadDocument:
         finally:
             os.unlink(txt_path)
             os.unlink(md_path)
+
+
+class TestEncodingDetection:
+    """Tests for encoding detection in _load_txt."""
+
+    def test_utf8_file_loads_correctly(self):
+        """UTF-8 encoded file loads correctly."""
+        content = "Hello, world! \u00e9\u00e8\u00ea"
+        with tempfile.NamedTemporaryFile(suffix=".txt", mode="wb", delete=False) as f:
+            f.write(content.encode("utf-8"))
+            tmp_path = f.name
+        try:
+            loaded = load_document(tmp_path)
+            assert loaded == content
+        finally:
+            os.unlink(tmp_path)
+
+    def test_latin1_file_fallback(self):
+        """Latin-1 encoded file loads via chardet or fallback."""
+        # Latin-1 characters (not valid UTF-8)
+        content_bytes = b"Caf\xe9 is great"
+        with tempfile.NamedTemporaryFile(suffix=".txt", mode="wb", delete=False) as f:
+            f.write(content_bytes)
+            tmp_path = f.name
+        try:
+            loaded = load_document(tmp_path)
+            # Should be decoded (maybe via chardet or latin-1 fallback)
+            assert isinstance(loaded, str)
+            assert len(loaded) > 0
+        finally:
+            os.unlink(tmp_path)
+
+    def test_utf8_bom_file_loads(self):
+        """UTF-8 with BOM loads correctly."""
+        content = "BOM file content"
+        with tempfile.NamedTemporaryFile(suffix=".txt", mode="wb", delete=False) as f:
+            f.write(b"\xef\xbb\xbf" + content.encode("utf-8"))
+            tmp_path = f.name
+        try:
+            loaded = load_document(tmp_path)
+            assert loaded == content
+        finally:
+            os.unlink(tmp_path)
+
+    def test_binary_file_fallback(self):
+        """Binary file (not text) loads without crash (fallback)."""
+        # Random bytes that may not be valid any encoding
+        content_bytes = b"\x00\x01\x02\x03\xff\xfe"
+        with tempfile.NamedTemporaryFile(suffix=".txt", mode="wb", delete=False) as f:
+            f.write(content_bytes)
+            tmp_path = f.name
+        try:
+            loaded = load_document(tmp_path)
+            # Should not raise, maybe returns decoded string with replacement chars
+            assert isinstance(loaded, str)
+        finally:
+            os.unlink(tmp_path)
