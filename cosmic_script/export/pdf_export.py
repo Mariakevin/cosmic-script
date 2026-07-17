@@ -28,14 +28,14 @@ PAGE_H = 11.0 * IN_TO_MM  # 279.4 mm
 LEFT_MARGIN = 1.5 * IN_TO_MM  # 38.1 mm
 RIGHT_MARGIN = 1.0 * IN_TO_MM  # 25.4 mm
 TOP_MARGIN = 1.0 * IN_TO_MM  # 25.4 mm
-BOTTOM_MARGIN = 0.5 * IN_TO_MM  # 12.7 mm
+BOTTOM_MARGIN = 1.0 * IN_TO_MM  # 25.4 mm
 
 CONTENT_W = PAGE_W - LEFT_MARGIN - RIGHT_MARGIN  # 152.4 mm (6")
 
 # Element positioning (absolute x from left edge of page)
 CHAR_X = 3.7 * IN_TO_MM  # 93.98 mm
 DIALOGUE_X = 2.5 * IN_TO_MM  # 63.5 mm
-DIALOGUE_W = 2.0 * IN_TO_MM  # 50.8 mm
+DIALOGUE_W = 3.5 * IN_TO_MM  # 88.9 mm (from 2.5" to 6")
 PAREN_X = 3.1 * IN_TO_MM  # 78.74 mm
 PAREN_W = 1.4 * IN_TO_MM  # 35.56 mm
 
@@ -46,13 +46,14 @@ HEADING_LINE_HEIGHT = 8.0  # mm blank line after scene heading / action blocks
 
 # Maximum number of full-width (6-in) characters per line at Courier 12pt 10 CPI
 _CHARS_PER_ACTION_LINE = 58
-# Dialogue lines are narrower — approximately 2 inches wide at 10 CPI
-_CHARS_PER_DIALOGUE_LINE = 18
+# Dialogue lines are narrower - approximately 3.5 inches wide at 10 CPI
+_CHARS_PER_DIALOGUE_LINE = 35
 
 
 # ---------------------------------------------------------------------------
 # Helper
 # ---------------------------------------------------------------------------
+
 
 def _mm(inches: float) -> float:
     """Convert inches to millimetres."""
@@ -62,6 +63,7 @@ def _mm(inches: float) -> float:
 # ---------------------------------------------------------------------------
 # PDF class
 # ---------------------------------------------------------------------------
+
 
 class ScreenplayPDF(FPDF):
     """Custom PDF class that renders a Screenplay in standard Hollywood format.
@@ -86,16 +88,18 @@ class ScreenplayPDF(FPDF):
     # ------------------------------------------------------------------
 
     def header(self) -> None:
-        """No header text in standard screenplay format."""
-        pass
+        """Page number at top right, starting from page 2 (title page unnumbered)."""
+        if self._is_title_page or self.page_no() <= 1:
+            return
+        self.set_y(_mm(0.5))
+        self.set_font("Courier", "", FONT_SIZE)
+        self.cell(0, LINE_HEIGHT, str(self.page_no()), align="R", new_x="LMARGIN", new_y="NEXT")
+        # Reset y position back to top margin after header
+        self.set_y(TOP_MARGIN)
 
     def footer(self) -> None:
-        """Page number at bottom centre, skipping the title page."""
-        if self._is_title_page:
-            return
-        self.set_y(-_mm(0.75))
-        self.set_font("Courier", "", FONT_SIZE)
-        self.cell(0, LINE_HEIGHT, str(self.page_no()), align="C", new_x="LMARGIN", new_y="NEXT")
+        """No footer in standard screenplay format."""
+        pass
 
     # ------------------------------------------------------------------
     # Title page
@@ -154,8 +158,11 @@ class ScreenplayPDF(FPDF):
     # ------------------------------------------------------------------
 
     def render_scene_heading(self, text: str) -> None:
-        """Render a scene heading (ALL CAPS, left-aligned)."""
+        """Render a scene heading (ALL CAPS, left-aligned), preceded by a blank line."""
         self._check_page_break()
+        # Add blank line before scene heading (unless at top of page)
+        if self.get_y() > TOP_MARGIN + 0.01:
+            self.ln(LINE_HEIGHT)
         self.set_x(LEFT_MARGIN)
         self.multi_cell(CONTENT_W, LINE_HEIGHT, text.upper(), align="L")
         self.ln(HEADING_LINE_HEIGHT)
@@ -167,8 +174,11 @@ class ScreenplayPDF(FPDF):
         self.multi_cell(CONTENT_W, LINE_HEIGHT, text, align="L")
 
     def render_character(self, text: str) -> None:
-        """Render a character cue (left-aligned at ~3.7" from left)."""
+        """Render a character cue (left-aligned at ~3.7" from left), preceded by a blank line."""
         self._check_page_break()
+        # Add blank line before character name
+        if self.get_y() > TOP_MARGIN + 0.01:
+            self.ln(LINE_HEIGHT)
         self._current_character = text.upper().strip()
         self._has_more_marker = False
         self.set_x(CHAR_X)
@@ -230,7 +240,9 @@ class ScreenplayPDF(FPDF):
             if self._current_character:
                 contd_name = f"{self._current_character} (CONT'D)"
                 self.set_x(CHAR_X)
-                self.multi_cell(CONTENT_W - (CHAR_X - LEFT_MARGIN), LINE_HEIGHT, contd_name, align="L")
+                self.multi_cell(
+                    CONTENT_W - (CHAR_X - LEFT_MARGIN), LINE_HEIGHT, contd_name, align="L"
+                )
 
     # ------------------------------------------------------------------
     # Bulk rendering
@@ -261,6 +273,7 @@ class ScreenplayPDF(FPDF):
         elements = screenplay.elements[:] if screenplay.elements else []
         if not elements and screenplay.scenes:
             from cosmic_script.export.fountain import _scenes_to_elements
+
             elements = _scenes_to_elements(screenplay.scenes)
 
         for element in elements:
@@ -290,6 +303,7 @@ class ScreenplayPDF(FPDF):
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
 
 def export_pdf(screenplay: Screenplay, output_path: str) -> str:
     """Export a Screenplay to a properly formatted screenplay PDF.
