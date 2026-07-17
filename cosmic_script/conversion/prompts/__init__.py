@@ -240,20 +240,20 @@ Analyze the chapter and create a structured scene outline. This outline will gui
 ## Output Format
 Return a JSON object with this structure:
 ```json
-{{{{{{{
+{{
   "genre": "drama/comedy/thriller/etc.",
   "tone": "emotional tone description",
   "scenes": [
-    {{{{{{{{
+    {{
       "location": "INT./EXT. LOCATION - TIME",
       "characters": ["CHARACTER1", "CHARACTER2"],
       "purpose": "advances plot / reveals character / builds tension",
       "beats": ["beat 1", "beat 2"],
       "notes": "optional notes about V.O., O.S., montage, etc."
-    }}}}}}}}
+    }}
   ],
   "character_notes": "any character consistency observations"
-}}}}}}}}
+}}
 ```
 
 ## Rules
@@ -307,20 +307,20 @@ You are evaluating the quality of a screenplay conversion from novel to Fountain
 ## Output Format:
 Return a JSON object:
 ```json
-{{{{{{{
-  "scores": {{{{{{{{
+{{
+  "scores": {{
     "format": 8,
     "characters": 9,
     "structure": 7,
     "visual": 8,
     "dialogue": 9,
     "coherence": 8
-  }}}}}}}}},
+  }},
   "overall": 8.2,
   "strengths": ["strength 1", "strength 2"],
   "weaknesses": ["weakness 1", "weakness 2"],
   "suggestions": ["suggestion 1", "suggestion 2"]
-}}}}}}}}
+}}
 ```"""
 
 # ---------------------------------------------------------------------------
