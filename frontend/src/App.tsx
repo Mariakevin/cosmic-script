@@ -232,7 +232,7 @@ function App() {
           <p>
             Cosmic Script &mdash; Open-source screenplay converter
             {' \u00b7 '}
-            <a href="https://github.com/mubaidr/cosmic-script" target="_blank" rel="noopener noreferrer">
+            <a href="https://github.com/Mariakevin/cosmic-script" target="_blank" rel="noopener noreferrer">
               GitHub
             </a>
           </p>

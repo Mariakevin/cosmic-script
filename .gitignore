@@ -55,3 +55,6 @@ run-dev.bat
 package.json
 improvements_report.json
 .github_backup/
+
+# Engram AI agent memory
+.engram/
