@@ -91,3 +91,37 @@ export async function analyzePacing(text: string): Promise<PacingResponse> {
   const { data } = await api.post<PacingResponse>('/api/pacing', { text });
   return data;
 }
+
+export interface ProgressEvent {
+  type: string;
+  chapter: number;
+  total_chapters: number;
+  message: string;
+}
+
+export async function convertWithProgress(
+  request: ConvertRequest,
+  onEvent: (event: ProgressEvent) => void,
+): Promise<void> {
+  const response = await fetch('/api/convert/stream', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: 'Conversion failed' }));
+    throw new Error(error.detail || 'Conversion failed');
+  }
+
+  const text = await response.text();
+  // Parse SSE events from the response
+  const events = text.split('\n\n').filter(Boolean);
+  for (const event of events) {
+    const dataMatch = event.match(/data: ({.*})/);
+    if (dataMatch) {
+      const data = JSON.parse(dataMatch[1]);
+      onEvent(data);
+    }
+  }
+}

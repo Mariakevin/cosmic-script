@@ -1,6 +1,7 @@
 import { useCallback, useState, useEffect } from 'react';
-import { convertToScreenplay, getGenres } from '../api/client';
+import { convertToScreenplay, convertWithProgress, getGenres } from '../api/client';
 import type { ScreenplayResponse, GenreInfo } from '../types';
+import type { ProgressEvent } from '../api/client';
 
 interface ConversionPanelProps {
   text: string;
@@ -14,6 +15,7 @@ export function ConversionPanel({ text, onConvert, onError }: ConversionPanelPro
   const [author, setAuthor] = useState('');
   const [genre, setGenre] = useState('');
   const [genres, setGenres] = useState<GenreInfo[]>([]);
+  const [progressMessage, setProgressMessage] = useState('');
 
   useEffect(() => {
     getGenres().then((data) => setGenres(data.genres)).catch(() => {});
@@ -21,7 +23,20 @@ export function ConversionPanel({ text, onConvert, onError }: ConversionPanelPro
 
   const handleConvert = useCallback(async () => {
     setConverting(true);
+    setProgressMessage('Starting conversion...');
     try {
+      await convertWithProgress(
+        {
+          text,
+          title: title || undefined,
+          author: author || undefined,
+          genre: genre || undefined,
+        },
+        (event: ProgressEvent) => {
+          setProgressMessage(event.message);
+        },
+      );
+      // After streaming completes, fetch the final result
       const data = await convertToScreenplay({
         text,
         title: title || undefined,
@@ -34,6 +49,7 @@ export function ConversionPanel({ text, onConvert, onError }: ConversionPanelPro
       onError(msg);
     } finally {
       setConverting(false);
+      setProgressMessage('');
     }
   }, [text, title, author, genre, onConvert, onError]);
 
@@ -89,6 +105,12 @@ export function ConversionPanel({ text, onConvert, onError }: ConversionPanelPro
           </select>
         </div>
       </div>
+
+      {converting && progressMessage && (
+        <div className="progress-message" style={{ padding: '8px 12px', marginBottom: '12px', background: '#f0f4ff', borderRadius: '6px', fontSize: '14px', color: '#4a5568' }}>
+          {progressMessage}
+        </div>
+      )}
 
       <button
         className={`btn btn-primary ${converting ? 'btn-loading' : ''}`}

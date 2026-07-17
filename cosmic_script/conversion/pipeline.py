@@ -16,6 +16,7 @@ def convert(
     title: str = "Untitled",
     author: str = "Unknown",
     genre: str | None = None,
+    progress_callback: callable = None,
 ) -> Screenplay:
     """Convert text content to a Screenplay object.
 
@@ -29,6 +30,7 @@ def convert(
         title: Screenplay title.
         author: Screenplay author.
         genre: Genre preset key (e.g. ``"action"``, ``"noir"``).
+        progress_callback: Optional callback for progress reporting.
 
     Returns:
         A Screenplay object with converted scenes.
@@ -37,7 +39,12 @@ def convert(
     converter = ScreenplayConverter(config)
 
     chapters = split_into_chapters(text)
-    screenplay = converter.convert_novel(chapters, title=title, author=author)
+    screenplay = converter.convert_novel(
+        chapters,
+        title=title,
+        author=author,
+        progress_callback=progress_callback,
+    )
 
     return screenplay
 

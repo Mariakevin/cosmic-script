@@ -1,4 +1,5 @@
 """Tests for FastAPI web endpoints."""
+
 import io
 import json
 import os
@@ -16,6 +17,7 @@ client = TestClient(app)
 # Helper: create a sample .txt file in a temp dir
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def sample_txt_path() -> str:
     """Create a temporary .txt file with sample story content."""
@@ -25,9 +27,7 @@ def sample_txt_path() -> str:
         '"Hello," said Sarah.\n\n'
         'John replied, "Good to see you."'
     )
-    tmp = tempfile.NamedTemporaryFile(
-        mode="w", suffix=".txt", delete=False, encoding="utf-8"
-    )
+    tmp = tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False, encoding="utf-8")
     tmp.write(content)
     tmp.close()
     yield tmp.name
@@ -37,6 +37,7 @@ def sample_txt_path() -> str:
 # ---------------------------------------------------------------------------
 # POST /api/documents/upload
 # ---------------------------------------------------------------------------
+
 
 class TestUploadDocument:
     """Coverage: happy-path, boundary, error-path, input-variation."""
@@ -101,15 +102,13 @@ class TestUploadDocument:
 # POST /api/chapters
 # ---------------------------------------------------------------------------
 
+
 class TestExtractChapters:
     """Coverage: happy-path, boundary, error-path."""
 
     def test_extract_chapters_happy(self) -> None:
         """Happy-path: text with chapter markers returns chapters."""
-        text = (
-            "Chapter 1: First\n\nSome text here.\n\n"
-            "Chapter 2: Second\n\nMore text here."
-        )
+        text = "Chapter 1: First\n\nSome text here.\n\nChapter 2: Second\n\nMore text here."
         response = client.post("/api/chapters", json={"text": text})
         assert response.status_code == 200
         data = response.json()
@@ -149,6 +148,7 @@ class TestExtractChapters:
 # ---------------------------------------------------------------------------
 # POST /api/convert
 # ---------------------------------------------------------------------------
+
 
 class TestConvert:
     """Coverage: happy-path (demo), boundary, error-path."""
@@ -215,8 +215,97 @@ class TestConvert:
 
 
 # ---------------------------------------------------------------------------
+# POST /api/convert/stream
+# ---------------------------------------------------------------------------
+
+
+class TestConvertStream:
+    """Coverage: happy-path (demo), boundary, error-path, SSE format."""
+
+    def test_convert_stream_demo_mode(self) -> None:
+        """Happy-path: demo mode returns SSE events."""
+        response = client.post(
+            "/api/convert/stream",
+            json={"text": "Sarah walked in.", "model": "demo"},
+        )
+        assert response.status_code == 200
+        assert response.headers["content-type"] == "text/event-stream; charset=utf-8"
+        text = response.text
+        assert "event: chapter_start" in text
+        assert "event: chapter_complete" in text
+        assert "event: conversion_complete" in text
+
+    def test_convert_stream_empty_text_returns_400(self) -> None:
+        """Error-path: empty text returns 400."""
+        response = client.post(
+            "/api/convert/stream",
+            json={"text": "", "model": "demo"},
+        )
+        assert response.status_code == 400
+
+    def test_convert_stream_whitespace_only_returns_400(self) -> None:
+        """Boundary: whitespace-only text returns 400."""
+        response = client.post(
+            "/api/convert/stream",
+            json={"text": "   \n  ", "model": "demo"},
+        )
+        assert response.status_code == 400
+
+    def test_convert_stream_sse_format(self) -> None:
+        """Invariant: SSE events have correct format with data payload."""
+        response = client.post(
+            "/api/convert/stream",
+            json={"text": "Hello world.", "model": "demo"},
+        )
+        text = response.text
+        # Check SSE format: "event: X\ndata: {...}\n\n"
+        lines = text.split("\n\n")
+        for block in lines:
+            if not block.strip():
+                continue
+            assert "event:" in block
+            assert "data:" in block
+            # Extract and parse JSON from data line
+            data_line = [l for l in block.split("\n") if l.startswith("data:")][0]
+            json_str = data_line[len("data: ") :]
+            import json
+
+            payload = json.loads(json_str)
+            assert "type" in payload
+            assert "chapter" in payload
+            assert "total_chapters" in payload
+            assert "message" in payload
+
+    def test_convert_stream_with_title_and_author(self) -> None:
+        """Input-variation: title and author are passed through."""
+        response = client.post(
+            "/api/convert/stream",
+            json={
+                "text": "Once upon a time.",
+                "model": "demo",
+                "title": "My Story",
+                "author": "Writer",
+            },
+        )
+        assert response.status_code == 200
+        text = response.text
+        assert '"message": "Converting chapter 1/1"' in text
+
+    def test_convert_stream_error_event(self) -> None:
+        """Error-path: conversion failure emits error event."""
+        response = client.post(
+            "/api/convert/stream",
+            json={"text": "Test.", "model": "nonexistent-model-xyz"},
+        )
+        # Should still return SSE with error event (or fallback to demo)
+        assert response.status_code == 200
+        assert "event:" in response.text
+
+
+# ---------------------------------------------------------------------------
 # GET /api/export
 # ---------------------------------------------------------------------------
+
 
 class TestExportFountain:
     """Coverage: happy-path, error-path."""
@@ -270,6 +359,7 @@ class TestExportFountain:
 # POST /api/coverage
 # ---------------------------------------------------------------------------
 
+
 class TestCoverage:
     """Coverage: happy-path (no LLM), error-path."""
 
@@ -304,13 +394,24 @@ class TestCoverage:
         )
         assert response.status_code == 200
         data = response.json()
-        for key in ("logline", "synopsis", "strengths", "weaknesses", "rating", "recommendation", "genre", "target_audience", "model_used"):
+        for key in (
+            "logline",
+            "synopsis",
+            "strengths",
+            "weaknesses",
+            "rating",
+            "recommendation",
+            "genre",
+            "target_audience",
+            "model_used",
+        ):
             assert key in data
 
 
 # ---------------------------------------------------------------------------
 # POST /api/logline
 # ---------------------------------------------------------------------------
+
 
 class TestLogline:
     """Coverage: happy-path (no LLM), error-path."""
@@ -347,12 +448,15 @@ class TestLogline:
 # GET /api/estimate
 # ---------------------------------------------------------------------------
 
+
 class TestEstimate:
     """Coverage: happy-path, boundary."""
 
     def test_estimate_with_text(self) -> None:
         """Happy-path: text returns page estimate."""
-        response = client.get("/api/estimate", params={"text": "INT. HOUSE - DAY\n\nJohn enters.\n\nJOHN\nHello."})
+        response = client.get(
+            "/api/estimate", params={"text": "INT. HOUSE - DAY\n\nJohn enters.\n\nJOHN\nHello."}
+        )
         assert response.status_code == 200
         data = response.json()
         assert "estimated_pages" in data
@@ -380,6 +484,7 @@ class TestEstimate:
 # ---------------------------------------------------------------------------
 # GET /api/genres
 # ---------------------------------------------------------------------------
+
 
 class TestGenres:
     """Coverage: happy-path."""

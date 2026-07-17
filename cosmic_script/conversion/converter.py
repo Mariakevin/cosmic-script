@@ -801,6 +801,7 @@ FADE OUT."""
         chapters: list[Chapter],
         title: str = "Untitled",
         author: str = "Unknown",
+        progress_callback: callable = None,
     ) -> Screenplay:
         """Convert a list of chapters into a complete :class:`Screenplay`.
 
@@ -812,6 +813,9 @@ FADE OUT."""
             chapters: Ordered list of chapters to convert.
             title: Screenplay title (default ``"Untitled"``).
             author: Screenplay author (default ``"Unknown"``).
+            progress_callback: Optional callback invoked with
+                (event_type, chapter_num, total_chapters, message)
+                for progress reporting.
 
         Returns:
             A :class:`Screenplay` containing all converted scenes.
@@ -821,10 +825,20 @@ FADE OUT."""
 
         registry = CharacterRegistry()
         all_scenes: list[Scene] = []
+        total = len(chapters)
 
-        for chapter in chapters:
+        for i, chapter in enumerate(chapters):
+            if progress_callback:
+                progress_callback(
+                    "chapter_start", i + 1, total, f"Converting chapter {i + 1}/{total}"
+                )
             scenes = self.convert_chapter(chapter, registry)
+            if progress_callback:
+                progress_callback("chapter_complete", i + 1, total, f"Chapter {i + 1} complete")
             all_scenes.extend(scenes)
+
+        if progress_callback:
+            progress_callback("conversion_complete", total, total, "All chapters converted")
 
         return Screenplay(
             title=title,

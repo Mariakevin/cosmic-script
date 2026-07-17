@@ -17,6 +17,7 @@ from cosmic_script.conversion.converter import (
 # Chapter model
 # ---------------------------------------------------------------------------
 
+
 class TestChapterModel:
     """Coverage: happy-path, invariant, boundary."""
 
@@ -36,6 +37,7 @@ class TestChapterModel:
 # Scene model
 # ---------------------------------------------------------------------------
 
+
 class TestSceneModel:
     """Coverage: happy-path, invariant."""
 
@@ -49,6 +51,7 @@ class TestSceneModel:
 # ---------------------------------------------------------------------------
 # Screenplay model
 # ---------------------------------------------------------------------------
+
 
 class TestScreenplayModel:
     """Coverage: happy-path, invariant, boundary."""
@@ -72,6 +75,7 @@ class TestScreenplayModel:
 # ---------------------------------------------------------------------------
 # ConversionConfig
 # ---------------------------------------------------------------------------
+
 
 class TestConversionConfig:
     """Coverage: happy-path, invariant, boundary."""
@@ -102,6 +106,7 @@ class TestConversionConfig:
 # ---------------------------------------------------------------------------
 # _retry_with_backoff
 # ---------------------------------------------------------------------------
+
 
 class TestRetryWithBackoff:
     """Coverage: happy-path, error-path, boundary."""
@@ -152,6 +157,7 @@ class TestRetryWithBackoff:
 
     def test_non_litellm_exception_not_caught(self) -> None:
         """Error-path: non-litellm exceptions propagate immediately."""
+
         def raises_value_error() -> str:
             raise ValueError("Something else")
 
@@ -162,6 +168,7 @@ class TestRetryWithBackoff:
 # ---------------------------------------------------------------------------
 # _parse_fountain
 # ---------------------------------------------------------------------------
+
 
 class TestParseFountain:
     """Coverage: happy-path, invariant, boundary, error-path, input-variation."""
@@ -176,10 +183,7 @@ class TestParseFountain:
 
     def test_multiple_scenes(self) -> None:
         """Happy-path: multiple scene headings."""
-        text = (
-            "INT. HOUSE - DAY\n\nAction here.\n\n"
-            "EXT. GARDEN - NIGHT\n\nMore action."
-        )
+        text = "INT. HOUSE - DAY\n\nAction here.\n\nEXT. GARDEN - NIGHT\n\nMore action."
         scenes = _parse_fountain(text)
         assert len(scenes) == 2
         assert scenes[0].heading == "INT. HOUSE - DAY"
@@ -246,6 +250,7 @@ class TestParseFountain:
 # ScreenplayConverter
 # ---------------------------------------------------------------------------
 
+
 class TestScreenplayConverter:
     """Coverage: convert_chapter and convert_novel (mocked)."""
 
@@ -298,17 +303,146 @@ class TestScreenplayConverter:
         assert sp.author == "Test"
         assert sp.scenes == []
 
-    def test_convert_novel_sequential(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_convert_novel_empty_with_callback(self) -> None:
+        """Boundary: empty chapter list with callback returns empty Screenplay and no callback calls."""
+        cfg = ConversionConfig(api_key="test-key")
+        converter = ScreenplayConverter(cfg)
+        calls = []
+        callback = lambda *args: calls.append(args)
+        sp = converter.convert_novel([], title="Empty", author="Test", progress_callback=callback)
+        assert sp.scenes == []
+        assert calls == []
+
+    def test_convert_novel_with_progress_callback(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Happy-path: progress_callback receives chapter_start and chapter_complete events."""
+        call_index = 0
+        fake_outlines = [
+            {
+                "genre": "drama",
+                "tone": "neutral",
+                "scenes": [
+                    {
+                        "location": "INT. ROOM - DAY",
+                        "characters": [],
+                        "purpose": "plot",
+                        "beats": [],
+                    }
+                ],
+                "character_notes": "",
+            },
+            {
+                "genre": "drama",
+                "tone": "neutral",
+                "scenes": [
+                    {
+                        "location": "EXT. GARDEN - NIGHT",
+                        "characters": [],
+                        "purpose": "plot",
+                        "beats": [],
+                    }
+                ],
+                "character_notes": "",
+            },
+        ]
+        outline_index = [0]
+
+        def fake_completion(**kwargs):
+            nonlocal call_index
+            system = kwargs["messages"][0]["content"]
+            if system.startswith("You are a professional screenplay adapter analyzing"):
+                idx = outline_index[0]
+                outline_index[0] += 1
+                content = json.dumps(fake_outlines[idx])
+                fm = type("FakeMessage", (), {"content": content})()
+                fc = type("FakeChoice", (), {"message": fm})()
+                return type("FakeResponse", (), {"choices": [fc]})()
+            if system.startswith("You are a professional screenplay evaluator"):
+                content = '{"scores":{"format":8,"characters":8,"structure":8,"visual":8,"dialogue":8,"coherence":8},"overall":8.0,"strengths":[],"weaknesses":[],"suggestions":[]}'
+                fm = type("FakeMessage", (), {"content": content})()
+                fc = type("FakeChoice", (), {"message": fm})()
+                return type("FakeResponse", (), {"choices": [fc]})()
+            content = "INT. ROOM - DAY\n\nARTHUR\nHello."
+            fm = type("FakeMessage", (), {"content": content})()
+            fc = type("FakeChoice", (), {"message": fm})()
+            return type("FakeResponse", (), {"choices": [fc]})()
+
+        monkeypatch.setattr(
+            "cosmic_script.conversion.converter.litellm.completion",
+            fake_completion,
+        )
+
+        cfg = ConversionConfig(api_key="test-key", max_retries=1, no_cache=True)
+        converter = ScreenplayConverter(cfg)
+        chapters = [
+            Chapter(number=1, text="Arthur entered the room."),
+            Chapter(number=2, text="Guinevere walked in the garden."),
+        ]
+
+        calls = []
+        callback = lambda *args: calls.append(args)
+
+        sp = converter.convert_novel(
+            chapters, title="Test", author="Tester", progress_callback=callback
+        )
+
+        assert len(sp.scenes) >= 2
+        # Verify callback was called with correct signatures
+        assert (
+            len(calls) >= 4
+        )  # chapter_start + chapter_complete for each chapter + conversion_complete
+        assert calls[0][0] == "chapter_start"
+        assert calls[0][3] == "Converting chapter 1/2"
+        assert calls[1][0] == "chapter_complete"
+        assert calls[2][0] == "chapter_start"
+        assert calls[2][3] == "Converting chapter 2/2"
+        assert calls[3][0] == "chapter_complete"
+        assert calls[4][0] == "conversion_complete"
+
+    def test_convert_novel_sequential(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Happy-path: processes chapters sequentially with shared registry."""
         call_index = 0
 
         # Pre-define outlines to avoid LLM call for outline generation
         fake_outlines = [
-            {"genre": "drama", "tone": "neutral", "scenes": [{"location": "INT. ROOM - DAY", "characters": [], "purpose": "advances plot", "beats": []}], "character_notes": ""},
-            {"genre": "drama", "tone": "neutral", "scenes": [{"location": "EXT. GARDEN - NIGHT", "characters": [], "purpose": "advances plot", "beats": []}], "character_notes": ""},
-            {"genre": "drama", "tone": "neutral", "scenes": [{"location": "INT. CASTLE - DAY", "characters": [], "purpose": "advances plot", "beats": []}], "character_notes": ""},
+            {
+                "genre": "drama",
+                "tone": "neutral",
+                "scenes": [
+                    {
+                        "location": "INT. ROOM - DAY",
+                        "characters": [],
+                        "purpose": "advances plot",
+                        "beats": [],
+                    }
+                ],
+                "character_notes": "",
+            },
+            {
+                "genre": "drama",
+                "tone": "neutral",
+                "scenes": [
+                    {
+                        "location": "EXT. GARDEN - NIGHT",
+                        "characters": [],
+                        "purpose": "advances plot",
+                        "beats": [],
+                    }
+                ],
+                "character_notes": "",
+            },
+            {
+                "genre": "drama",
+                "tone": "neutral",
+                "scenes": [
+                    {
+                        "location": "INT. CASTLE - DAY",
+                        "characters": [],
+                        "purpose": "advances plot",
+                        "beats": [],
+                    }
+                ],
+                "character_notes": "",
+            },
         ]
         outline_index = 0
 
@@ -363,9 +497,7 @@ class TestScreenplayConverter:
         assert sp.title == "Test"
         assert sp.author == "Tester"
 
-    def test_convert_chapter_handles_api_error(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_convert_chapter_handles_api_error(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Error-path: API errors raise RuntimeError after retries."""
         import litellm as _litellm
 
@@ -403,6 +535,7 @@ class TestScreenplayConverter:
 # ---------------------------------------------------------------------------
 # build_user_prompt
 # ---------------------------------------------------------------------------
+
 
 class TestBuildUserPrompt:
     """Coverage: happy-path, invariant, boundary."""
@@ -457,6 +590,7 @@ class TestBuildUserPrompt:
 # ---------------------------------------------------------------------------
 # ConversionCache
 # ---------------------------------------------------------------------------
+
 
 class TestConversionCache:
     """Coverage: happy-path, invariant, boundary."""
@@ -566,6 +700,7 @@ class TestConversionCache:
 # Self-healing
 # ---------------------------------------------------------------------------
 
+
 class TestSelfHealing:
     """Coverage: self-healing pipeline in convert_chapter."""
 
@@ -580,7 +715,9 @@ class TestSelfHealing:
             # Outline calls
             if system.startswith("You are a professional screenplay adapter analyzing"):
                 outline_call[0] += 1
-                content = json.dumps({"genre": "drama", "tone": "neutral", "scenes": [], "character_notes": ""})
+                content = json.dumps(
+                    {"genre": "drama", "tone": "neutral", "scenes": [], "character_notes": ""}
+                )
                 fm = type("FakeMessage", (), {"content": content})()
                 fc = type("FakeChoice", (), {"message": fm})()
                 return type("FakeResponse", (), {"choices": [fc]})()
@@ -619,14 +756,14 @@ class TestSelfHealing:
         scenes = converter.convert_chapter(chapter, reg)
         assert len(scenes) == 1
 
-    def test_self_heal_triggered_on_invalid_output(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_self_heal_triggered_on_invalid_output(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Happy-path: self-heal triggered when output has errors."""
-        fake = self._make_fake_completion([
-            "INT. ROOM - DAY\n\nsarah\nHello.",  # Invalid (lowercase)
-            "INT. ROOM - DAY\n\nSARAH\nHello.",  # Fixed
-        ])
+        fake = self._make_fake_completion(
+            [
+                "INT. ROOM - DAY\n\nsarah\nHello.",  # Invalid (lowercase)
+                "INT. ROOM - DAY\n\nSARAH\nHello.",  # Fixed
+            ]
+        )
         monkeypatch.setattr(
             "cosmic_script.conversion.converter.litellm.completion",
             fake,
@@ -641,14 +778,14 @@ class TestSelfHealing:
         scenes = converter.convert_chapter(chapter, reg)
         assert len(scenes) == 1
 
-    def test_self_heal_keeps_original_when_worse(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_self_heal_keeps_original_when_worse(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Error-path: self-heal produces worse output, keep original."""
-        fake = self._make_fake_completion([
-            "INT. ROOM - DAY\n\nSARAH\nHello.",  # Valid
-            "bad output with no scene heading",   # Worse
-        ])
+        fake = self._make_fake_completion(
+            [
+                "INT. ROOM - DAY\n\nSARAH\nHello.",  # Valid
+                "bad output with no scene heading",  # Worse
+            ]
+        )
         monkeypatch.setattr(
             "cosmic_script.conversion.converter.litellm.completion",
             fake,

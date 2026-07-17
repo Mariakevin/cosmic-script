@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import asyncio
 import os
+import threading
 from concurrent.futures import ThreadPoolExecutor
 
 from fastapi import APIRouter, HTTPException
+from starlette.responses import StreamingResponse
 from cosmic_script.web.schemas import (
     ConvertRequest,
     ScreenplayResponse,
@@ -14,6 +16,7 @@ from cosmic_script.web.schemas import (
     ElementResponse,
     ErrorResponse,
 )
+from cosmic_script.web.streaming import ProgressEvent, ProgressTracker
 from cosmic_script.conversion.pipeline import convert
 from cosmic_script.conversion.model_router import get_router
 from cosmic_script.models import Screenplay
@@ -148,3 +151,90 @@ async def list_models():
     )
 
     return {"models": models}
+
+
+@router.post(
+    "/convert/stream",
+    responses={400: {"model": ErrorResponse}, 504: {"model": ErrorResponse}},
+)
+async def convert_to_screenplay_stream(request: ConvertRequest):
+    """Convert text with SSE progress streaming.
+
+    Returns Server-Sent Events for real-time progress updates.
+    Each event contains: type, chapter, total_chapters, message.
+    """
+    if not request.text.strip():
+        raise HTTPException(status_code=400, detail="Text content is required")
+
+    demo_mode = os.environ.get("DEMO_MODE", "false").lower() == "true"
+    if request.model == "demo" or demo_mode:
+        # For demo mode, emit mock progress events then return screenplay
+        tracker = ProgressTracker()
+        tracker.emit(
+            ProgressEvent(
+                event_type="chapter_start",
+                chapter=1,
+                total_chapters=1,
+                message="Converting chapter 1/1",
+            )
+        )
+        tracker.emit(
+            ProgressEvent(
+                event_type="chapter_complete",
+                chapter=1,
+                total_chapters=1,
+                message="Chapter 1 complete",
+            )
+        )
+        tracker.emit(
+            ProgressEvent(
+                event_type="conversion_complete", total_chapters=1, message="All chapters converted"
+            )
+        )
+        events = tracker.get_events()
+        sse_data = "".join(e.to_sse() for e in events)
+        return StreamingResponse(
+            iter([sse_data]),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
+
+    effective_model = request.model or "auto"
+    tracker = ProgressTracker()
+
+    def on_progress(event_type, chapter, total, message):
+        tracker.emit(
+            ProgressEvent(
+                event_type=event_type,
+                chapter=chapter,
+                total_chapters=total,
+                message=message,
+            )
+        )
+
+    def run_conversion():
+        try:
+            convert(
+                text=request.text,
+                model=effective_model,
+                api_key=os.environ.get("GEMINI_API_KEY"),
+                title=request.title or "Untitled",
+                author=request.author or "Unknown",
+                genre=request.genre,
+                progress_callback=on_progress,
+            )
+        except Exception:
+            tracker.emit(ProgressEvent(event_type="error", message="Conversion failed"))
+
+    thread = threading.Thread(target=run_conversion, daemon=True)
+    thread.start()
+    thread.join(timeout=LLM_TIMEOUT)
+
+    events = tracker.get_events()
+    sse_data = "".join(e.to_sse() for e in events)
+
+    return StreamingResponse(
+        iter([sse_data]),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
