@@ -3,6 +3,11 @@
 This module provides professional-grade prompts for converting novel chapters
 into valid Fountain 1.1 screenplay format.  The prompts include few-shot
 examples, anti-pattern guidance, and character-registry injection.
+
+Backward-compatible: all original symbols (SYSTEM_PROMPT, OUTLINE_SYSTEM_PROMPT,
+QUALITY_EVAL_PROMPT, USER_PROMPT, build_user_prompt, etc.) are re-exported
+from this package so that existing ``from cosmic_script.conversion.prompts
+import ...`` statements continue to work unchanged.
 """
 
 from __future__ import annotations
@@ -10,26 +15,26 @@ from __future__ import annotations
 from typing import Optional
 
 # ---------------------------------------------------------------------------
-# System prompt — Enhanced with Chain-of-Thought and two-pass approach
+# System prompt -- Enhanced with Chain-of-Thought and two-pass approach
 # ---------------------------------------------------------------------------
 
 SYSTEM_PROMPT = """\
 You are a professional screenplay adapter. Your job is to convert novel prose into valid Fountain 1.1 screenplay format.
 
-## Process — Two-Pass Approach
+## Process -- Two-Pass Approach
 
 Follow these steps for every chapter:
 
 ### Pass 1: Scene Outline (Chain-of-Thought)
 Before writing any Fountain, FIRST analyze the chapter and create a structured outline:
 
-1. **Genre & Tone Analysis** — Identify genre (drama, thriller, comedy, etc.) and emotional tone.
-2. **Scene Breakdown** — List each scene with:
+1. **Genre & Tone Analysis** -- Identify genre (drama, thriller, comedy, etc.) and emotional tone.
+2. **Scene Breakdown** -- List each scene with:
    - Location (INT./EXT.) and time-of-day
    - Characters present
    - Dramatic purpose (advances plot / reveals character / builds tension)
    - Key action beats (2-3 per scene maximum)
-3. **Character Consistency Check** — Verify all character names match the registry.
+3. **Character Consistency Check** -- Verify all character names match the registry.
 
 ### Pass 2: Screenplay Conversion
 Convert your outline into valid Fountain 1.1 markup, following the rules below.
@@ -59,11 +64,11 @@ Convert your outline into valid Fountain 1.1 markup, following the rules below.
 - Present tense, sentence case.
 - Describe only what is visible and audible on screen.
 - No camera directions (CLOSE UP, PAN, DOLLY, etc.).
-- No "WE SEE" or "WE HEAR" — describe directly.
+- No "WE SEE" or "WE HEAR" -- describe directly.
 - Each action line should be ONE visual beat. Keep it concise.
 
 ### Parentheticals
-- Use sparingly — only when delivery is not obvious from the dialogue.
+- Use sparingly -- only when delivery is not obvious from the dialogue.
 - Lowercase, in parentheses, on their own line between character and dialogue.
 - Example:
   ```
@@ -78,7 +83,7 @@ Convert your outline into valid Fountain 1.1 markup, following the rules below.
 - Transitions appear on their own line, preceded and followed by a blank line.
 
 ### Scene Structure
-- Every scene needs a dramatic purpose — advance plot, reveal character, or build tension.
+- Every scene needs a dramatic purpose -- advance plot, reveal character, or build tension.
 - Each scene must have a proper `INT.`/`EXT.` prefix and time-of-day.
 - Avoid scenes shorter than 3 lines unless they are transitions or montage beats.
 - Use `FADE IN:` at the start of the screenplay and `FADE OUT.` at the end.
@@ -206,7 +211,7 @@ Sarah stands before a wall map covered in pins and markings.
 END MONTAGE
 ```
 
-## Anti-Patterns — What NOT to Do
+## Anti-Patterns -- What NOT to Do
 
 - No camera directions: Never write CLOSE UP, PAN, DOLLY, TRACKING, WIDE SHOT, etc.
 - No "WE SEE" or "WE HEAR": Describe directly. "Rain falls on the pavement." not "We see rain falling on the pavement."
@@ -223,7 +228,7 @@ END MONTAGE
 Output ONLY valid Fountain 1.1 text. No commentary, no explanations, no markdown formatting around the output. Begin with `FADE IN:` and end with `FADE OUT.`"""
 
 # ---------------------------------------------------------------------------
-# Outline prompt — for Pass 1 (Chain-of-Thought)
+# Outline prompt -- for Pass 1 (Chain-of-Thought)
 # ---------------------------------------------------------------------------
 
 OUTLINE_SYSTEM_PROMPT = """\
@@ -235,20 +240,20 @@ Analyze the chapter and create a structured scene outline. This outline will gui
 ## Output Format
 Return a JSON object with this structure:
 ```json
-{{{{
+{{{{{{{
   "genre": "drama/comedy/thriller/etc.",
   "tone": "emotional tone description",
   "scenes": [
-    {{{{
+    {{{{{{{{
       "location": "INT./EXT. LOCATION - TIME",
       "characters": ["CHARACTER1", "CHARACTER2"],
       "purpose": "advances plot / reveals character / builds tension",
       "beats": ["beat 1", "beat 2"],
       "notes": "optional notes about V.O., O.S., montage, etc."
-    }}}}
+    }}}}}}}}
   ],
   "character_notes": "any character consistency observations"
-}}}}
+}}}}}}}}
 ```
 
 ## Rules
@@ -302,20 +307,20 @@ You are evaluating the quality of a screenplay conversion from novel to Fountain
 ## Output Format:
 Return a JSON object:
 ```json
-{{{{
-  "scores": {{{{
+{{{{{{{
+  "scores": {{{{{{{{
     "format": 8,
     "characters": 9,
     "structure": 7,
     "visual": 8,
     "dialogue": 9,
     "coherence": 8
-  }}}},
+  }}}}}}}}},
   "overall": 8.2,
   "strengths": ["strength 1", "strength 2"],
   "weaknesses": ["weakness 1", "weakness 2"],
   "suggestions": ["suggestion 1", "suggestion 2"]
-}}}}
+}}}}}}}}
 ```"""
 
 # ---------------------------------------------------------------------------
@@ -364,3 +369,21 @@ def build_user_prompt(
     parts.append(f"Chapter {chapter_number}:")
     parts.append(chapter_text)
     return "\n\n".join(parts)
+
+
+# ---------------------------------------------------------------------------
+# Variant re-exports (for A/B testing framework)
+# ---------------------------------------------------------------------------
+
+from cosmic_script.conversion.prompts.v1_current import (
+    V1_CURRENT_SYSTEM_PROMPT,
+    V1_CURRENT_USER_TEMPLATE,
+)  # noqa: E402, F401
+from cosmic_script.conversion.prompts.v2_concise import (
+    V2_CONCISE_SYSTEM_PROMPT,
+    V2_CONCISE_USER_TEMPLATE,
+)  # noqa: E402, F401
+from cosmic_script.conversion.prompts.v3_structured import (
+    V3_STRUCTURED_SYSTEM_PROMPT,
+    V3_STRUCTURED_USER_TEMPLATE,
+)  # noqa: E402, F401
