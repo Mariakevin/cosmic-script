@@ -5,22 +5,25 @@ build-backend = "hatchling.build"
 [project]
 name = "cosmic-script"
 version = "0.1.0"
-description = "Convert free-form text stories into proper screenplay format"
+description = "Convert novels to screenplays using AI or rule-based parsing"
 readme = "README.md"
 license = "MIT"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 authors = [
-    { name = "Cosmic Script Team" }
+    { name = "Mariakevin", email = "mariakevin@users.noreply.github.com" },
 ]
-keywords = ["screenplay", "script", "fountain", "novel", "conversion"]
+keywords = ["screenplay", "fountain", "novel", "conversion", "ai"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Text Processing :: Markup",
+    "Topic :: Multimedia :: Sound/Audio",
+    "Programming Language :: Python :: 3 :: Only",
+    "Natural Language :: English",
 ]
 
 dependencies = [
@@ -54,6 +57,11 @@ dev = [
 nlp = [
     "spacy>=3.7.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/Mariakevin/cosmic-script"
+Repository = "https://github.com/Mariakevin/cosmic-script"
+Issues = "https://github.com/Mariakevin/cosmic-script/issues"
 
 [project.scripts]
 cosmic-script = "cosmic_script.cli:app"
