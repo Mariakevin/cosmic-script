@@ -211,4 +211,33 @@ def _generate_fdx(screenplay: Screenplay) -> str:
             script.add_element(factory(text))
 
     writer = Writer()
-    return writer.write(script)
+    xml_output = writer.write(script)
+
+    # screenplay-tools Writer ignores titleEntries; inject them manually
+    title_entries: list[tuple[str, str]] = []
+    if screenplay.title:
+        title_entries.append(("Title", screenplay.title))
+    if screenplay.author:
+        title_entries.append(("Author", screenplay.author))
+    if title_entries:
+        import re as _re
+
+        title_page_parts: list[str] = []
+        for key, value in title_entries:
+            title_page_parts.append(
+                f"        <Paragraph Type=\"$Title\">"
+                f"<Text>{value}</Text></Paragraph>"
+            )
+        title_page_xml = (
+            "    <TitlePage>\n"
+            "        <Content>\n"
+            + "\n".join(title_page_parts)
+            + "\n        </Content>\n"
+            "    </TitlePage>"
+        )
+        # Insert TitlePage before <Content> or <Content/>
+        xml_output = xml_output.replace(
+            "    <Content", title_page_xml + "\n    <Content"
+        )
+
+    return xml_output

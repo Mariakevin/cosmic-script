@@ -456,9 +456,9 @@ John walks in."""
         assert not note_errors
 
     def test_auto_fix_empty_text(self):
-        """Empty text is unchanged."""
+        """Empty or whitespace-only text is trimmed."""
         assert self.validator.auto_fix("") == ""
-        assert self.validator.auto_fix("  ") == "  "
+        assert self.validator.auto_fix("  ") == ""
 
     def test_auto_fix_no_errors(self):
         """Valid text is unchanged."""

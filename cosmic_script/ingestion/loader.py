@@ -65,7 +65,7 @@ def _load_txt(path: Path) -> str:
     """Read a plain-text file with encoding detection."""
     # Try UTF-8 first (most common)
     try:
-        return path.read_text(encoding="utf-8")
+        return path.read_text(encoding="utf-8").lstrip("\ufeff")
     except UnicodeDecodeError:
         pass
     # If chardet available, detect encoding
@@ -74,11 +74,11 @@ def _load_txt(path: Path) -> str:
         detection = chardet.detect(raw)
         if detection and detection.get("encoding"):
             try:
-                return raw.decode(detection["encoding"])
+                return raw.decode(detection["encoding"]).lstrip("\ufeff")
             except (UnicodeDecodeError, LookupError):
                 pass
     # Fallback to latin-1 (never fails)
-    return path.read_bytes().decode("latin-1")
+    return path.read_bytes().decode("latin-1").lstrip("\ufeff")
 
 
 def _load_md(path: Path) -> str:

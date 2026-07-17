@@ -196,9 +196,11 @@ class TestScreenplayTypography:
         )
 
     def test_blank_line_before_character(self):
-        """Character cue should be preceded by a blank line."""
+        """Character cue should be preceded by a blank line when not at page top."""
         pdf = ScreenplayPDF()
         pdf.add_page()
+        # Add content first so blank line is inserted
+        pdf.render_action("Some action text.")
         y_before = pdf.get_y()
         pdf.render_character("JOHN")
         y_after = pdf.get_y()
@@ -250,7 +252,7 @@ class TestScreenplayTypography:
         pdf.add_page()
         pdf.render_character("JOHN")
         # Fill up the page to force a page break
-        for _ in range(50):
+        for _ in range(60):
             pdf.render_action("Filler text to push content down the page.")
         pdf.render_dialogue("This dialogue should trigger a page break with (CONT'D).")
         # Should have at least 2 pages now

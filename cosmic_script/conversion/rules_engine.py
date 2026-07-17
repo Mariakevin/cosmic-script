@@ -308,6 +308,23 @@ _DIALOGUE_ATTRIB_BEFORE_RE = re.compile(
     r"['\"\u201c]",
 )
 
+# Attribution after (name-first): "dialogue," Name verb. / Name verb.
+# Used as fallback when the AFTER (verb-first) pattern doesn't match.
+_DIALOGUE_ATTRIB_NAME_FIRST_RE = re.compile(
+    r"\s+([A-Za-z]+(?:\s+[A-Za-z]+)?)\s+"
+    r"(?:said|asked|replied|answered|called|shouted|whispered|"
+    r"yelled|exclaimed|muttered|cried|laughed|smiled|nodded|"
+    r"continued|began|started|added|finished|"
+    r"murmured|breathed|sighed|mumbled|stammered|lisped|"
+    r"bellowed|roared|howled|barked|snapped|"
+    r"stated|declared|announced|proclaimed|mentioned|remarked|noted|observed|"
+    r"sobbed|wailed|gasped|choked|groaned|moaned|wept|cried out|"
+    r"blurted|blurted out|burst out|cut in|interjected|piped up|"
+    r"conceded|admitted|retorted|"
+    r"drawled|rambled|grumbled|groused|complained|griped)[,.]?",
+    re.IGNORECASE,
+)
+
 # V.O. cue patterns
 _VO_CUE_RE = re.compile(
     r"\b(?:thought|pondered|wondered|reflected|considered|muttered "
@@ -452,14 +469,21 @@ class DialogueExtractor:
             if name.upper() not in _NAME_SKIP_WORDS:
                 return name.upper()
 
+        # Fallback: name-first pattern after quote ("dialogue," Name verb.)
+        # Don't apply skip-words filter here: in "dialogue," she murmured.,
+        # "she" IS the character name, not a false positive.
+        name_first_match = _DIALOGUE_ATTRIB_NAME_FIRST_RE.search(after_region)
+        if name_first_match:
+            name = name_first_match.group(1).strip()
+            return name.upper()
+
         # Look before the quote (within ~80 chars)
         before_start = max(0, quote_start - 80)
         before_region = text[before_start : quote_start + 1]
         before_match = _DIALOGUE_ATTRIB_BEFORE_RE.search(before_region)
         if before_match:
             name = before_match.group(1).strip()
-            if name.upper() not in _NAME_SKIP_WORDS:
-                return name.upper()
+            return name.upper()
 
         return "UNKNOWN"
 
@@ -566,14 +590,15 @@ class LocationInferencer:
         """
         combined = " ".join(paragraphs).lower()
 
-        # Infer location type
+        # Infer location type using word-boundary matching to avoid
+        # false positives like "lot" matching inside "pilot".
         location_type = "INT"
         for kw in _INT_KEYWORDS:
-            if kw in combined:
+            if re.search(r"\b" + re.escape(kw) + r"\b", combined):
                 location_type = "INT"
                 break
         for kw in _EXT_KEYWORDS:
-            if kw in combined:
+            if re.search(r"\b" + re.escape(kw) + r"\b", combined):
                 location_type = "EXT"
                 break
 
@@ -594,9 +619,10 @@ class LocationInferencer:
         # Try "in the X" / "at the X" patterns
         match = re.search(
             r"(?:in the|at the|inside the|near the|by the|on the|"
-            r"through the|arrived at|entered the|walked into|returned to|"
+            r"through the|from the|along the|across the|against the|"
+            r"walked the|headed for|arrived at|entered the|walked into|returned to|"
             r"went to|headed to|stepped into|moved to)\s+"
-            r"([a-z]+(?:\s+[a-z]+)?)",
+            r"([a-z]+(?:[- ][a-z]+)*)",
             text,
         )
         if match:
@@ -678,21 +704,12 @@ class ActionFormatter:
         )
 
         # Simplify "began to" / "started to"
-        began_to_pattern = re.compile(r"\b(\w+)\s+began\s+to\b", re.IGNORECASE)
-        started_to_pattern = re.compile(r"\b(\w+)\s+started\s+to\b", re.IGNORECASE)
+        began_to_pattern = re.compile(r"\b(\w+)\s+began\s+to\s+(\w+)", re.IGNORECASE)
+        started_to_pattern = re.compile(r"\b(\w+)\s+started\s+to\s+(\w+)", re.IGNORECASE)
 
         def _simplify_began_to(match: re.Match[str]) -> str:
             subject = match.group(1)
-            # Extract the infinitive that follows "began to"
-            rest = match.group(0)
-            # "He began to run" -> "He ran"
-            # Find the word after "to "
-            after_to = rest[rest.lower().index("to") + 3 :]
-            verb = after_to.strip().split()[0] if after_to.strip() else ""
-            if not verb:
-                return match.group(0)
-            # Simple past tense: just use the verb as-is for now
-            # (full conjugation is complex; keep it simple)
+            verb = match.group(2)
             return f"{subject} {verb}"
 
         result = began_to_pattern.sub(_simplify_began_to, result)
@@ -842,10 +859,15 @@ class FountainAssembler:
             # Character cue
             character = dialogue["character"]
             vo_ext = " (V.O.)" if dialogue["vo"] else ""
-            content_parts.append(f"{character}{vo_ext}")
-
-            # Dialogue text
-            content_parts.append(str(dialogue["text"]))
+            if character == "UNKNOWN":
+                # Can't identify speaker -- emit as action line
+                cleaned = action_formatter.format_paragraph(str(dialogue["text"]))
+                if cleaned:
+                    content_parts.append(cleaned)
+            else:
+                content_parts.append(f"{character}{vo_ext}")
+                # Dialogue text
+                content_parts.append(str(dialogue["text"]))
 
             last_end = end
 
@@ -903,6 +925,17 @@ class FountainAssembler:
                 i += 1
                 continue
 
+            # Page break: === (must check before synopsis since === starts with =)
+            if _PAGE_BREAK_RE.match(line):
+                elements.append(
+                    ScreenplayElement(
+                        element_type=ElementType.PAGE_BREAK,
+                        text=line,
+                    )
+                )
+                i += 1
+                continue
+
             # Synopsis: = text
             if _SYNOPSIS_RE.match(line):
                 elements.append(
@@ -919,17 +952,6 @@ class FountainAssembler:
                 elements.append(
                     ScreenplayElement(
                         element_type=ElementType.LYRIC,
-                        text=line,
-                    )
-                )
-                i += 1
-                continue
-
-            # Page break: ===
-            if _PAGE_BREAK_RE.match(line):
-                elements.append(
-                    ScreenplayElement(
-                        element_type=ElementType.PAGE_BREAK,
                         text=line,
                     )
                 )
